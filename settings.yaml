@@ -1,0 +1,6 @@
+llm: claude
+issue_tracker: zoho
+version_control: github
+notification: teams
+cloud: aws
+vector_store: chromadb

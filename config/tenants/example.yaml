@@ -1,0 +1,25 @@
+# Copy this file and rename to your team name, e.g. team_payments.yaml
+
+team_name: example_team
+
+# Override default adapter providers (optional — falls back to settings.yaml)
+issue_tracker: zoho
+version_control: github
+notification: teams
+
+# Team-specific settings
+github_repo: org/repo-name
+github_default_branch: develop
+teams_channel_webhook: https://...
+
+# Zoho
+zoho_department_id: ""
+
+# Reviewer assignment
+auto_assign_reviewers: true
+fallback_reviewer: github-username
+
+# Working hours (for notifications)
+timezone: Asia/Kolkata
+work_hours_start: 9
+work_hours_end: 18

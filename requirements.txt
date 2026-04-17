@@ -1,0 +1,33 @@
+# API
+fastapi
+uvicorn
+
+# AI / LLM
+anthropic
+openai
+google-generativeai
+
+# Vector Store
+chromadb
+pinecone-client
+
+# GitHub
+PyGithub
+
+# Queue
+boto3
+
+# HTTP
+httpx
+requests
+
+# Config
+pyyaml
+python-dotenv
+
+# Security scan
+bandit
+
+# Testing
+pytest
+pytest-asyncio
