@@ -25,6 +25,10 @@ requests
 pyyaml
 python-dotenv
 
+# PRD parsing
+pdfplumber
+python-docx
+
 # Security scan
 bandit
 

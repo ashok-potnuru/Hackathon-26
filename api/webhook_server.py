@@ -26,6 +26,26 @@ async def zoho_webhook(request: Request, background_tasks: BackgroundTasks):
     return {"status": "accepted", "issue_id": str(issue_id)}
 
 
+@app.post("/webhook/zoho/task")
+async def zoho_task_webhook(request: Request, background_tasks: BackgroundTasks):
+    await verify_zoho_webhook(request, os.environ.get("ZOHO_TASK_WEBHOOK_TOKEN", ""))
+
+    body = await request.json()
+    task_id = body.get("taskId") or body.get("task_id") or body.get("id")
+    project_id = body.get("projectId") or body.get("project_id", "")
+    if not task_id:
+        raise HTTPException(status_code=400, detail="Missing task ID in payload")
+
+    background_tasks.add_task(enqueue_job, {
+        "task_id": str(task_id),
+        "project_id": str(project_id),
+        "source": "zoho_task",
+        "payload": {**body, "source": "zoho_task"},
+        "tenant": str(body.get("portalId", os.environ.get("ZOHO_PORTAL_ID", "default"))),
+    })
+    return {"status": "accepted", "task_id": str(task_id)}
+
+
 @app.post("/webhook/github")
 async def github_webhook(request: Request, background_tasks: BackgroundTasks):
     secret = os.environ.get("GITHUB_WEBHOOK_SECRET", "")

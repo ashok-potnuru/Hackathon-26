@@ -32,6 +32,9 @@ def load_adapters() -> dict:
     if tracker == "zoho":
         from adapters.issue_tracker.zoho import ZohoAdapter
         adapters["issue_tracker"] = ZohoAdapter()
+    elif tracker == "zoho_tasks":
+        from adapters.issue_tracker.zoho_tasks import ZohoTasksAdapter
+        adapters["issue_tracker"] = ZohoTasksAdapter()
     elif tracker == "jira":
         from adapters.issue_tracker.jira import JiraAdapter
         adapters["issue_tracker"] = JiraAdapter()

@@ -1,6 +1,6 @@
 llm: claude
-issue_tracker: zoho
-version_control: github
-notification: teams
-cloud: aws
-vector_store: chromadb
+issue_tracker: zoho          # zoho | zoho_tasks | jira | linear
+version_control: github      # github | gitlab | azure_devops
+notification: teams          # teams | slack | discord
+cloud: aws                   # aws | gcp | azure
+vector_store: chromadb       # chromadb | pinecone

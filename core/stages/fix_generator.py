@@ -5,17 +5,33 @@ from core.exceptions import FixGenerationError, SecurityScanError
 from core.models.fix import FixModel
 
 
-async def run(context: dict) -> dict:
-    issue = context["issue"]
-    research = context["research"]
-    llm = context["adapters"]["llm"]
-
-    fix_ctx = {
+def _build_fix_context(issue, research: dict, work_type: str) -> dict:
+    if work_type == "feature":
+        return {
+            "title": issue.title,
+            "description": (
+                f"You are implementing a new feature based on a PRD.\n\n"
+                f"PRD Content:\n{issue.description}\n\n"
+                "Generate the required code to implement this feature."
+            ),
+            "code_context": research["code_context"],
+            "similar_fixes": research["similar_fixes"],
+        }
+    return {
         "title": issue.title,
         "description": issue.description,
         "code_context": research["code_context"],
         "similar_fixes": research["similar_fixes"],
     }
+
+
+async def run(context: dict) -> dict:
+    issue = context["issue"]
+    research = context["research"]
+    llm = context["adapters"]["llm"]
+    work_type = context.get("work_type", "bugfix")
+
+    fix_ctx = _build_fix_context(issue, research, work_type)
 
     last_err = None
     for attempt in range(MAX_FIX_RETRIES + 1):
@@ -36,8 +52,8 @@ async def run(context: dict) -> dict:
 
         confidence = float(data.get("confidence", 0.7))
         if confidence < 0.4:
-            last_err = f"Low confidence score: {confidence}"
-            fix_ctx["previous_attempt"] = f"Previous fix had low confidence ({confidence}). Improve it."
+            last_err = f"Low confidence: {confidence}"
+            fix_ctx["previous_attempt"] = f"Previous attempt had low confidence ({confidence}). Improve it."
             continue
 
         file_contents: dict = data.get("files", {})
@@ -53,4 +69,4 @@ async def run(context: dict) -> dict:
         )
         return {**context, "fix": fix}
 
-    raise FixGenerationError(f"Fix generation failed after {MAX_FIX_RETRIES + 1} attempts: {last_err}")
+    raise FixGenerationError(f"Code generation failed after {MAX_FIX_RETRIES + 1} attempts: {last_err}")
