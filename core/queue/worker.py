@@ -34,6 +34,10 @@ def run_worker() -> None:
                 pass
 
 
+if __name__ == "__main__":
+    run_worker()
+
+
 def get_queue_depth() -> int:
     try:
         adapters = load_adapters()
