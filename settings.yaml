@@ -1,5 +1,5 @@
-llm: claude
-issue_tracker: zoho          # zoho | zoho_tasks | jira | linear
+llm: openai          # claude | openai | gemini
+issue_tracker: zoho_sprints  # zoho_sprints | jira | linear
 version_control: github      # github | gitlab | azure_devops
 notification: teams          # teams | slack | discord
 cloud: aws                   # aws | gcp | azure

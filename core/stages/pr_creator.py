@@ -3,12 +3,10 @@ from core.exceptions import DuplicatePRError
 from core.models.pr import PRModel
 
 
-def _zoho_link(issue_id: str, work_type: str) -> str:
-    if work_type == "feature":
-        portal = issue_id.split("|")[0] if "|" in issue_id else ""
-        task = issue_id.split("|")[1] if "|" in issue_id else issue_id
-        return f"https://projects.zoho.com/portal/{portal}/tasks/{task}"
-    return f"https://desk.zoho.com/agent/v1/ticket/{issue_id}"
+def _zoho_link(issue_id: str) -> str:
+    team_id = issue_id.split("|")[0] if "|" in issue_id else ""
+    item_id = issue_id.split("|")[1] if "|" in issue_id else issue_id
+    return f"https://sprints.zoho.com/team/{team_id}#itemdetails/{item_id}"
 
 
 async def run(context: dict) -> dict:
@@ -41,7 +39,7 @@ async def run(context: dict) -> dict:
         if reviewer:
             break
 
-    zoho_url = _zoho_link(issue.id, work_type)
+    zoho_url = _zoho_link(issue.id)
 
     if work_type == "feature":
         label = "Feature Implementation"

@@ -28,13 +28,10 @@ def load_adapters() -> dict:
     else:
         raise AdapterNotConfiguredError(f"Unknown llm: {llm}")
 
-    tracker = s.get("issue_tracker", "zoho")
-    if tracker == "zoho":
-        from adapters.issue_tracker.zoho import ZohoAdapter
-        adapters["issue_tracker"] = ZohoAdapter()
-    elif tracker == "zoho_tasks":
-        from adapters.issue_tracker.zoho_tasks import ZohoTasksAdapter
-        adapters["issue_tracker"] = ZohoTasksAdapter()
+    tracker = s.get("issue_tracker", "zoho_sprints")
+    if tracker == "zoho_sprints":
+        from adapters.issue_tracker.zoho_sprints import ZohoSprintsAdapter
+        adapters["issue_tracker"] = ZohoSprintsAdapter()
     elif tracker == "jira":
         from adapters.issue_tracker.jira import JiraAdapter
         adapters["issue_tracker"] = JiraAdapter()

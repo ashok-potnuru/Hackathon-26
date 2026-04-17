@@ -48,19 +48,11 @@ async def run(context: dict) -> dict:
     adapters = context["adapters"]
     issue_tracker = adapters["issue_tracker"]
     llm = adapters["llm"]
-    source = payload.get("source", "zoho")
-    work_type = "feature" if source == "zoho_task" else "bugfix"
-
-    if work_type == "feature":
-        project_id = str(payload.get("projectId") or payload.get("project_id", ""))
-        task_id = str(payload.get("taskId") or payload.get("task_id") or payload.get("id", ""))
-        from adapters.issue_tracker.zoho_tasks import encode_task_id
-        issue_id = encode_task_id(project_id, task_id)
-    else:
-        issue_id = str(payload.get("issue_id") or payload.get("ticketId") or payload.get("id", ""))
+    issue_id = str(payload.get("issue_id") or payload.get("itemId") or payload.get("id", ""))
 
     issue = issue_tracker.get_issue(issue_id)
-    issue.tenant = context.get("tenant", "default")
+    # ZohoSprintsAdapter sets issue.tenant to "task" (feature) or "issue" (bugfix)
+    work_type = "feature" if issue.tenant == "task" else "bugfix"
 
     raw_attachments = issue_tracker.get_attachments(issue.id)
 
