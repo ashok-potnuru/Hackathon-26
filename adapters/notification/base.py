@@ -1,6 +1,15 @@
-"""
-Abstract base class that all notification adapters must implement.
-Methods to implement: send_message(channel, message), send_alert(channel, message),
-send_feedback_prompt(channel, issue_id), health_check().
-To add a new notifier: subclass this class and implement all methods.
-"""
+from abc import ABC, abstractmethod
+
+
+class NotificationBase(ABC):
+    @abstractmethod
+    def send_message(self, channel: str, message: str) -> None: ...
+
+    @abstractmethod
+    def send_alert(self, channel: str, message: str) -> None: ...
+
+    @abstractmethod
+    def send_feedback_prompt(self, channel: str, issue_id: str) -> None: ...
+
+    @abstractmethod
+    def health_check(self) -> None: ...

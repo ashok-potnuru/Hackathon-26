@@ -1,5 +1,14 @@
-"""
-Defines FixModel, which represents a generated code fix ready for PR creation.
-Fields: files_changed, diff, reasoning, regression_test, security_scan_passed,
-lint_passed, confidence_score. Passed from fix_generator to pr_creator.
-"""
+from dataclasses import dataclass, field
+from typing import Dict, List
+
+
+@dataclass
+class FixModel:
+    files_changed: List[str]
+    diff: str
+    reasoning: str
+    regression_test: str
+    security_scan_passed: bool = False
+    lint_passed: bool = False
+    confidence_score: float = 0.0
+    file_contents: Dict[str, str] = field(default_factory=dict)

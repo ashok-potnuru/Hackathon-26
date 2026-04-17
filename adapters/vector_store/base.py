@@ -1,6 +1,13 @@
-"""
-Abstract base class that all vector store adapters must implement.
-Methods to implement: store_fix(issue_id, issue_text, fix_text),
-search_similar(issue_text, top_k), health_check().
-Used by the research stage for fix memory lookup — never call a concrete store from core/.
-"""
+from abc import ABC, abstractmethod
+from typing import Dict, List
+
+
+class VectorStoreBase(ABC):
+    @abstractmethod
+    def store_fix(self, issue_id: str, issue_text: str, fix_text: str) -> None: ...
+
+    @abstractmethod
+    def search_similar(self, issue_text: str, top_k: int = 5) -> List[Dict]: ...
+
+    @abstractmethod
+    def health_check(self) -> None: ...

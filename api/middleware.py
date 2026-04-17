@@ -12,5 +12,8 @@ async def verify_github_signature(request: Request, secret: str) -> None:
 
 
 async def verify_zoho_webhook(request: Request, token: str) -> None:
-    # TODO: implement Zoho webhook verification
-    pass
+    if not token:
+        return
+    incoming = request.headers.get("X-ZOHO-WEBHOOK-TOKEN", "")
+    if not hmac.compare_digest(incoming, token):
+        raise HTTPException(status_code=401, detail="Invalid Zoho webhook token")

@@ -1,6 +1,25 @@
-"""
-Abstract base class that all cloud provider adapters must implement.
-Methods to implement: store_file(key, data), read_file(key), queue_job(payload),
-get_secret(name), health_check().
-To add a new cloud provider: subclass this class and implement all methods.
-"""
+from abc import ABC, abstractmethod
+from typing import Dict, Optional
+
+
+class CloudBase(ABC):
+    @abstractmethod
+    def store_file(self, key: str, data: bytes) -> None: ...
+
+    @abstractmethod
+    def read_file(self, key: str) -> bytes: ...
+
+    @abstractmethod
+    def queue_job(self, payload: Dict) -> str: ...
+
+    @abstractmethod
+    def dequeue_job(self) -> Optional[Dict]: ...
+
+    @abstractmethod
+    def delete_job(self, receipt_handle: str) -> None: ...
+
+    @abstractmethod
+    def get_secret(self, name: str) -> str: ...
+
+    @abstractmethod
+    def health_check(self) -> None: ...

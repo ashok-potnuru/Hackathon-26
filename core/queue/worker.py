@@ -1,5 +1,45 @@
-"""
-Pulls jobs from the queue and runs the full pipeline for each job.
-Implements retry logic and dead-letter queue routing on repeated failure.
-On unrecoverable failures, notifies Teams and updates Zoho — never swallow errors silently.
-"""
+import asyncio
+import time
+
+from config.registry import load_adapters
+from core.observability.logger import get_logger
+from core.pipeline import run_pipeline
+
+logger = get_logger(__name__)
+
+
+def run_worker() -> None:
+    adapters = load_adapters()
+    cloud = adapters["cloud"]
+    notification = adapters["notification"]
+
+    logger.info("Worker started — polling for jobs...")
+    while True:
+        job = cloud.dequeue_job()
+        if not job:
+            time.sleep(5)
+            continue
+
+        receipt = job.pop("_receipt_handle", None)
+        issue_id = job.get("issue_id", "unknown")
+        try:
+            asyncio.run(run_pipeline(job, adapters))
+            if receipt:
+                cloud.delete_job(receipt)
+        except Exception as e:
+            logger.error(f"Pipeline failed for issue {issue_id}: {e}")
+            try:
+                notification.send_alert("", f"AutoFix pipeline failed for issue {issue_id}: {e}")
+            except Exception:
+                pass
+
+
+def get_queue_depth() -> int:
+    try:
+        adapters = load_adapters()
+        cloud = adapters["cloud"]
+        if hasattr(cloud, "get_queue_depth"):
+            return cloud.get_queue_depth()
+    except Exception:
+        pass
+    return -1

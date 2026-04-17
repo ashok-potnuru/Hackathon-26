@@ -1,6 +1,19 @@
-"""
-Abstract base class that all LLM adapters must implement.
-Methods to implement: analyze(prompt), generate_fix(context), review_fix(fix),
-embed(text), health_check().
-To add a new LLM provider: subclass this class and implement all methods.
-"""
+from abc import ABC, abstractmethod
+from typing import List
+
+
+class LLMBase(ABC):
+    @abstractmethod
+    def analyze(self, prompt: str) -> str: ...
+
+    @abstractmethod
+    def generate_fix(self, context: dict) -> str: ...
+
+    @abstractmethod
+    def review_fix(self, fix: str) -> dict: ...
+
+    @abstractmethod
+    def embed(self, text: str) -> List[float]: ...
+
+    @abstractmethod
+    def health_check(self) -> None: ...
