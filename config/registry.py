@@ -41,9 +41,6 @@ def load_adapters() -> dict:
     from adapters.cloud.aws import AWSAdapter
     adapters["cloud"] = AWSAdapter()
 
-    from adapters.vector_store.chromadb import ChromaDBAdapter
-    adapters["vector_store"] = ChromaDBAdapter()
-
     adapters["settings"] = {
         "default_repos": s.get("default_repos", []),
         "default_branch": s.get("default_branch", "main"),
