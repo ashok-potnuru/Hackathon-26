@@ -1,6 +1,9 @@
 # Verify all configured adapters can connect before running the pipeline
 # Usage: python scripts/test_adapters.py
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from config.registry import load_adapters
 
 

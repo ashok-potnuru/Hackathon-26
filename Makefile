@@ -1,31 +1,34 @@
 .PHONY: install run test lint format setup check
 
+PYTHON=venv/bin/python
+UVICORN=venv/bin/uvicorn
+
 install:
-	pip install -r requirements.txt
+	$(PYTHON) -m pip install -r requirements.txt
 	pre-commit install
 
 run:
-	uvicorn api.webhook_server:app --reload --port 8000
+	PYTHONPATH=. $(UVICORN) api.webhook_server:app --reload --port 8000
 
 worker:
-	python -m core.queue.worker
+	PYTHONPATH=. venv/bin/watchfiles "$(PYTHON) -m core.queue.worker" core/ adapters/ config/
 
 test:
-	pytest tests/ -v
+	PYTHONPATH=. venv/bin/pytest tests/ -v
 
 lint:
-	ruff check .
-	mypy .
+	venv/bin/ruff check .
+	venv/bin/mypy .
 
 format:
-	black .
-	ruff check --fix .
+	venv/bin/black .
+	venv/bin/ruff check --fix .
 
 setup:
-	python scripts/setup_chroma.py
+	PYTHONPATH=. $(PYTHON) scripts/setup_chroma.py
 
 check:
-	python scripts/test_adapters.py
+	PYTHONPATH=. $(PYTHON) scripts/test_adapters.py
 
 docker-up:
 	docker-compose up --build

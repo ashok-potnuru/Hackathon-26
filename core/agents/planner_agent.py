@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 
 from core.agents.base_agent import BaseAgent
 from core.constants import MAX_FILES_FOR_AUTO_FIX
 from core.utils.graph_navigator import GraphNavigator
+from core.utils.json_utils import extract_json
 
 _PLANNER_SYSTEM = (
     "You are a code planning expert. Given a bug report or feature request, "
@@ -67,12 +67,10 @@ class PlannerAgent(BaseAgent):
         )
 
         try:
-            start = raw.index("{")
-            end = raw.rindex("}") + 1
-            data = json.loads(raw[start:end])
+            data = extract_json(raw)
             keywords = [str(k).lower() for k in data.get("keywords", []) if k]
             change_type = str(data.get("change_type", "bugfix"))
-        except (ValueError, json.JSONDecodeError):
+        except Exception:
             keywords = [w for w in title.lower().split() if len(w) > 2][:5]
             change_type = "bugfix"
 

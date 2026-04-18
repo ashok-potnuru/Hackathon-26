@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 
 from core.agents.base_agent import BaseAgent
+from core.utils.json_utils import extract_json
 
 _REVIEWER_SYSTEM = """\
 You are an adversarial code reviewer. Your job is NOT to confirm the fix works — \
@@ -101,10 +101,8 @@ class ReviewerAgent(BaseAgent):
         )
 
         try:
-            start = raw.index("{")
-            end = raw.rindex("}") + 1
-            data = json.loads(raw[start:end])
-        except (ValueError, json.JSONDecodeError):
+            data = extract_json(raw)
+        except Exception:
             return ReviewResult(
                 approved=True, verdict="PASS", feedback="", issues=[], security_ok=True
             )

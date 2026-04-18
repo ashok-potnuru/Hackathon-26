@@ -1,6 +1,9 @@
 import asyncio
 import time
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from config.registry import load_adapters
 from core.observability.logger import get_logger
 from core.pipeline import run_pipeline

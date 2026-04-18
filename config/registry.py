@@ -15,8 +15,8 @@ def load_adapters() -> dict:
     s = _load_settings()
     adapters: dict = {}
 
-    llm = s.get("llm", "claude")
-    model = s.get("model")  # None → each adapter uses its own default
+    llm = s.get("llm", "openai")
+    model = s.get("model")
     if llm == "claude":
         from adapters.llm.claude import ClaudeAdapter
         adapters["llm"] = ClaudeAdapter(model=model)
@@ -29,66 +29,24 @@ def load_adapters() -> dict:
     else:
         raise AdapterNotConfiguredError(f"Unknown llm: {llm}")
 
-    tracker = s.get("issue_tracker", "zoho_sprints")
-    if tracker == "zoho_sprints":
-        from adapters.issue_tracker.zoho_sprints import ZohoSprintsAdapter
-        adapters["issue_tracker"] = ZohoSprintsAdapter()
-    elif tracker == "jira":
-        from adapters.issue_tracker.jira import JiraAdapter
-        adapters["issue_tracker"] = JiraAdapter()
-    elif tracker == "linear":
-        from adapters.issue_tracker.linear import LinearAdapter
-        adapters["issue_tracker"] = LinearAdapter()
-    else:
-        raise AdapterNotConfiguredError(f"Unknown issue_tracker: {tracker}")
+    from adapters.issue_tracker.zoho_sprints import ZohoSprintsAdapter
+    adapters["issue_tracker"] = ZohoSprintsAdapter()
 
-    vc = s.get("version_control", "github")
-    if vc == "github":
-        from adapters.version_control.github import GitHubAdapter
-        adapters["version_control"] = GitHubAdapter()
-    elif vc == "gitlab":
-        from adapters.version_control.gitlab import GitLabAdapter
-        adapters["version_control"] = GitLabAdapter()
-    elif vc == "azure_devops":
-        from adapters.version_control.azure_devops import AzureDevOpsAdapter
-        adapters["version_control"] = AzureDevOpsAdapter()
-    else:
-        raise AdapterNotConfiguredError(f"Unknown version_control: {vc}")
+    from adapters.version_control.github import GitHubAdapter
+    adapters["version_control"] = GitHubAdapter()
 
-    notif = s.get("notification", "teams")
-    if notif == "teams":
-        from adapters.notification.teams import TeamsAdapter
-        adapters["notification"] = TeamsAdapter()
-    elif notif == "slack":
-        from adapters.notification.slack import SlackAdapter
-        adapters["notification"] = SlackAdapter()
-    elif notif == "discord":
-        from adapters.notification.discord import DiscordAdapter
-        adapters["notification"] = DiscordAdapter()
-    else:
-        raise AdapterNotConfiguredError(f"Unknown notification: {notif}")
+    from adapters.notification.teams import TeamsAdapter
+    adapters["notification"] = TeamsAdapter()
 
-    cloud = s.get("cloud", "aws")
-    if cloud == "aws":
-        from adapters.cloud.aws import AWSAdapter
-        adapters["cloud"] = AWSAdapter()
-    elif cloud == "gcp":
-        from adapters.cloud.gcp import GCPAdapter
-        adapters["cloud"] = GCPAdapter()
-    elif cloud == "azure":
-        from adapters.cloud.azure import AzureCloudAdapter
-        adapters["cloud"] = AzureCloudAdapter()
-    else:
-        raise AdapterNotConfiguredError(f"Unknown cloud: {cloud}")
+    from adapters.cloud.aws import AWSAdapter
+    adapters["cloud"] = AWSAdapter()
 
-    vs = s.get("vector_store", "chromadb")
-    if vs == "chromadb":
-        from adapters.vector_store.chromadb import ChromaDBAdapter
-        adapters["vector_store"] = ChromaDBAdapter()
-    elif vs == "pinecone":
-        from adapters.vector_store.pinecone import PineconeAdapter
-        adapters["vector_store"] = PineconeAdapter()
-    else:
-        raise AdapterNotConfiguredError(f"Unknown vector_store: {vs}")
+    from adapters.vector_store.chromadb import ChromaDBAdapter
+    adapters["vector_store"] = ChromaDBAdapter()
+
+    adapters["settings"] = {
+        "default_repos": s.get("default_repos", []),
+        "default_branch": s.get("default_branch", "main"),
+    }
 
     return adapters

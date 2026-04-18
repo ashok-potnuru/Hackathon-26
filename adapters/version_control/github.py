@@ -58,6 +58,9 @@ class GitHubAdapter(VersionControlBase):
 
     def commit_changes(self, repo: str, branch: str, files: dict, message: str) -> None:
         for path, content in files.items():
+            if not isinstance(content, str):
+                import json
+                content = json.dumps(content, indent=2)
             sha = None
             try:
                 sha = self._get(f"{_API}/repos/{repo}/contents/{path}", params={"ref": branch})["sha"]
