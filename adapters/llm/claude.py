@@ -10,9 +10,9 @@ _SYSTEM_PROMPT = "You are an expert software engineer. Follow instructions exact
 
 
 class ClaudeAdapter(LLMBase):
-    def __init__(self):
+    def __init__(self, model: str | None = None):
         self._client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        self._model = "claude-sonnet-4-6"
+        self._model = model or "claude-sonnet-4-6"
 
     def _system(self) -> list:
         return [{"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}]
@@ -64,6 +64,15 @@ class ClaudeAdapter(LLMBase):
 
     def embed(self, text: str) -> list:
         return []
+
+    def chat_completion(self, system_prompt: str, messages: list, max_tokens: int = 4096) -> str:
+        resp = self._client.messages.create(
+            model=self._model,
+            max_tokens=max_tokens,
+            system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
+            messages=messages,
+        )
+        return resp.content[0].text
 
     def health_check(self) -> None:
         try:

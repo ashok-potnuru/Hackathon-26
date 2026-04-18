@@ -18,10 +18,4 @@ class BaseAgent:
         messages: list[dict],
         max_tokens: int = 4096,
     ) -> str:
-        resp = self._llm._client.messages.create(
-            model=self._llm._model,
-            max_tokens=max_tokens,
-            system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
-            messages=messages,
-        )
-        return resp.content[0].text
+        return self._llm.chat_completion(system_prompt, messages, max_tokens)

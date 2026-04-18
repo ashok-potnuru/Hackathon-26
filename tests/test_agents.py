@@ -11,16 +11,9 @@ from core.utils.graph_navigator import GraphNavigator
 
 
 def _make_llm(response_text: str) -> MagicMock:
-    """Return a mock ClaudeAdapter whose messages.create() returns response_text."""
-    mock_content = MagicMock()
-    mock_content.text = response_text
-    mock_response = MagicMock()
-    mock_response.content = [mock_content]
-    mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    """Return a mock LLM adapter whose chat_completion() returns response_text."""
     llm = MagicMock()
-    llm._client = mock_client
-    llm._model = "claude-sonnet-4-6"
+    llm.chat_completion.return_value = response_text
     return llm
 
 
@@ -116,8 +109,9 @@ class TestCoderAgent:
         llm = _make_llm(json.dumps(payload))
         agent = CoderAgent(llm)
         agent.generate("T", "D", {"f.js": "old"}, reviewer_feedback="Please fix the null check")
-        call_kwargs = llm._client.messages.create.call_args[1]
-        user_content = call_kwargs["messages"][0]["content"]
+        _, call_kwargs = llm.chat_completion.call_args
+        messages = call_kwargs["messages"]
+        user_content = messages[0]["content"]
         assert "Please fix the null check" in user_content
 
 

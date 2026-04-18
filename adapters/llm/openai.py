@@ -8,9 +8,9 @@ from core.exceptions import AdapterError
 
 
 class OpenAIAdapter(LLMBase):
-    def __init__(self):
+    def __init__(self, model: str | None = None):
         self._client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        self._model = "gpt-4o"
+        self._model = model or "gpt-4o"
         self._embed_model = "text-embedding-3-small"
 
     def analyze(self, prompt: str) -> str:
@@ -58,6 +58,14 @@ class OpenAIAdapter(LLMBase):
     def embed(self, text: str) -> list:
         resp = self._client.embeddings.create(model=self._embed_model, input=text)
         return resp.data[0].embedding
+
+    def chat_completion(self, system_prompt: str, messages: list, max_tokens: int = 4096) -> str:
+        resp = self._client.chat.completions.create(
+            model=self._model,
+            max_tokens=max_tokens,
+            messages=[{"role": "system", "content": system_prompt}] + messages,
+        )
+        return resp.choices[0].message.content
 
     def health_check(self) -> None:
         try:

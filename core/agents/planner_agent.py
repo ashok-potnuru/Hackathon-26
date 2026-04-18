@@ -17,9 +17,19 @@ _KEYWORD_PROMPT = """\
 Issue title: {title}
 Issue description: {description}
 
-Extract 3-8 lowercase keywords (function names, module names, domain terms) \
-that would appear in the filenames or code identifiers of files that need to \
-change to address this issue.
+Extract 3-8 lowercase keywords that would appear as substrings in filenames \
+or short code identifiers (function names, class names, model names).
+
+CRITICAL RULES for keywords:
+- Use SHORT single words or two-word identifiers: "region", "regions", "auth", "settings"
+- NEVER use long compound phrases like "platform_settings_api" or "region_object" — \
+  these will not match anything in the codebase
+- Think about what the actual variable/function/filename looks like in code
+- If the issue involves a database model, include the model name AND "migration"
+- If the issue involves an API response, include the route/schema name (e.g. "auth", "settings") \
+  NOT generic terms like "api_response"
+- If the issue adds fields to a model, also include "schema" and "docs" to find \
+  OpenAPI/documentation files that must be updated
 
 Return JSON only: {{"keywords": ["kw1", "kw2", ...], "change_type": "bugfix|feature|refactor"}}"""
 

@@ -16,12 +16,13 @@ def load_adapters() -> dict:
     adapters: dict = {}
 
     llm = s.get("llm", "claude")
+    model = s.get("model")  # None → each adapter uses its own default
     if llm == "claude":
         from adapters.llm.claude import ClaudeAdapter
-        adapters["llm"] = ClaudeAdapter()
+        adapters["llm"] = ClaudeAdapter(model=model)
     elif llm == "openai":
         from adapters.llm.openai import OpenAIAdapter
-        adapters["llm"] = OpenAIAdapter()
+        adapters["llm"] = OpenAIAdapter(model=model)
     elif llm == "gemini":
         from adapters.llm.gemini import GeminiAdapter
         adapters["llm"] = GeminiAdapter()

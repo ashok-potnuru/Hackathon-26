@@ -17,3 +17,8 @@ class LLMBase(ABC):
 
     @abstractmethod
     def health_check(self) -> None: ...
+
+    @abstractmethod
+    def chat_completion(self, system_prompt: str, messages: list, max_tokens: int = 4096) -> str:
+        """Provider-agnostic chat completion used by agents."""
+        ...

@@ -24,21 +24,6 @@ Or with Docker:
 docker-compose up --build
 ```
 
-## Configuration
-
-Edit `settings.yaml` to choose providers:
-
-```yaml
-llm: claude                 # claude | openai | gemini
-issue_tracker: zoho         # zoho | jira | linear
-version_control: github     # github | gitlab | azure_devops
-notification: teams         # teams | slack | discord
-cloud: aws                  # aws | gcp | azure
-vector_store: chromadb      # chromadb | pinecone
-```
-
-For per-team config, copy `config/tenants/example.yaml` and fill in team-specific values.
-
 ## Project Structure
 
 ```
@@ -50,10 +35,92 @@ scripts/       Setup and health check utilities
 tests/         Unit and integration tests
 ```
 
+## Configuration
+
+Edit `settings.yaml` to pick your LLM and model — no code changes needed:
+
+```yaml
+llm: openai          # claude | openai | gemini
+model: gpt-4o        # model name for the active provider
+```
+
+| Provider | Example models |
+|----------|---------------|
+| `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` |
+| `claude` | `claude-sonnet-4-6`, `claude-opus-4-7` |
+| `gemini` | `gemini-1.5-pro` |
+
+## Test Files
+
+### Unit tests — no API key needed, run instantly
+
+| File | What it tests |
+|------|--------------|
+| `tests/test_agents.py` | PlannerAgent, CoderAgent, ReviewerAgent — all mocked |
+| `tests/test_orchestrator.py` | MultiAgentOrchestrator full loop — mocked adapters |
+| `tests/test_graph_navigator.py` | GraphNavigator keyword search and BFS — offline |
+
+### Individual agent tests — test one agent at a time with real LLM
+
+| File | Agent | What it does |
+|------|-------|-------------|
+| `scripts/test_planner.py` | PlannerAgent | Extracts keywords from issue → searches graph → returns files to fix |
+| `scripts/test_explorer.py` | ExplorerAgent | Reads code → decides which files must change vs. context only |
+| `scripts/test_coder.py` | CoderAgent | Generates the actual code fix for given files |
+| `scripts/test_reviewer.py` | ReviewerAgent | Reviews a fix → returns PASS / FAIL / PARTIAL + detailed checks |
+
+### Other live tests
+
+| File | What it tests |
+|------|--------------|
+| `scripts/test_agents_live.py` | All agents end-to-end in one run |
+| `scripts/test_adapters.py` | All configured adapters (Zoho, GitHub, etc.) can connect |
+| `tests/test_github_adapter.py` | GitHub adapter — fetches files, creates PRs |
+
 ## Running Tests
 
+### Step 1 — do this once per terminal session
+
 ```bash
+source venv/bin/activate          # activate the virtual environment
+set -a && source .env && set +a   # load API keys from .env
+pip install pyyaml -q             # only needed once if not already installed
+```
+
+### Step 2 — run whichever test you want
+
+```bash
+# Unit tests (no API key needed)
 make test
+pytest tests/test_agents.py -v
+pytest tests/test_orchestrator.py -v
+pytest tests/test_graph_navigator.py -v
+
+# Test each AI agent individually (calls real OpenAI/Claude API)
+python3 scripts/test_planner.py    # PlannerAgent
+python3 scripts/test_explorer.py   # ExplorerAgent
+python3 scripts/test_coder.py      # CoderAgent
+python3 scripts/test_reviewer.py   # ReviewerAgent
+
+# All agents in one run
+python3 scripts/test_agents_live.py
+
+# Verify all adapter connections (needs all env vars in .env)
+make check
+```
+
+### To test a different bug — edit 2 lines at the top of any script
+
+```python
+ISSUE_TITLE       = "Your bug title here"
+ISSUE_DESCRIPTION = "What goes wrong and where..."
+```
+
+### To switch model — edit `settings.yaml`
+
+```yaml
+llm: openai
+model: gpt-4o-mini   # cheaper/faster for quick tests
 ```
 
 ## Adding a New Adapter
