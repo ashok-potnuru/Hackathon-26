@@ -11,28 +11,36 @@ from adapters.version_control.github import GitHubAdapter
 from core.models.pr import PRModel
 
 
-def run(title: str, description: str, github_repo: str, base_branch: str,
-        vc_adapter=None, create_pr: bool = True) -> dict:
+def run(title: str, description: str, github_repo: str = "", base_branch: str = "master",
+        vc_adapter=None, create_pr: bool = True, repo_type: str = "api",
+        cross_repo_context: str = "") -> dict:
     """
     Run the full multi-agent chain driven by job data from the Zoho webhook.
 
     Args:
         title:       Item name from Zoho
         description: Item description from Zoho — used as the LLM prompt
-        github_repo: e.g. "org/repo"
+        github_repo: e.g. "org/repo" — derived from env (API_REPO/CMS_REPO) if empty
         base_branch: PR target branch
         vc_adapter:  version_control adapter to fetch files via GitHub API
         create_pr:   whether to open a GitHub PR at the end
+        repo_type:          "api" (Node.js) or "cms" (PHP/Laravel)
+        cross_repo_context: summary of what the other repo's pipeline already planned,
+                            passed to PlannerAgent so field names stay consistent
 
     Returns:
         dict with plan, explorer_result, coder_result, reviewer_result, pr_url
     """
+    if not github_repo:
+        env_key = "API_REPO" if repo_type == "api" else "CMS_REPO"
+        github_repo = os.getenv(env_key, "")
+
     llm = load_llm()
 
     # ── STEP 1: PlannerAgent ─────────────────────────────────────────────────
-    nav = get_navigator()
+    nav = get_navigator(repo_type)
     planner = PlannerAgent(llm, nav)
-    plan = planner.plan(title, description)
+    plan = planner.plan(title, description, cross_repo_context=cross_repo_context)
 
     if not plan.target_files:
         plan.target_files = ["services/placeholder.js"]
@@ -70,6 +78,7 @@ def run(title: str, description: str, github_repo: str, base_branch: str,
         description=description,
         code_context=coder_input,
         base_files=code_sections,
+        repo_type=repo_type,
     )
 
     # ── STEP 4: ReviewerAgent ────────────────────────────────────────────────

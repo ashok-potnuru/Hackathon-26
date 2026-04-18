@@ -6,11 +6,24 @@ from dataclasses import dataclass, field
 from core.agents.base_agent import BaseAgent
 from core.utils.json_utils import extract_json
 
-_CODER_SYSTEM = (
-    "You are an expert software engineer fixing bugs and implementing features "
-    "in a Node.js/JavaScript codebase. You receive file contents and a requirement. "
+_CODER_SYSTEM_API = (
+    "You are an expert Node.js/JavaScript engineer fixing bugs and implementing features "
+    "in an Express.js REST API codebase. You receive file contents and a requirement. "
     "Always return valid JSON only — no markdown fences, no explanation outside the JSON."
 )
+
+_CODER_SYSTEM_CMS = (
+    "You are an expert PHP 8.2/Laravel 10 engineer fixing bugs and implementing features "
+    "in a Laravel CMS codebase. Follow Laravel conventions: use Eloquent ORM, Artisan commands, "
+    "Blade views, Livewire components, and Stancl/Tenancy multi-tenant patterns. "
+    "When adding database fields, include the corresponding migration file. "
+    "Always return valid JSON only — no markdown fences, no explanation outside the JSON."
+)
+
+# Legacy default — kept for backward compat
+_CODER_SYSTEM = _CODER_SYSTEM_API
+
+_LANG_FENCE = {"api": "javascript", "cms": "php"}
 
 _CODER_PROMPT = """\
 Requirement:
@@ -135,6 +148,7 @@ class CoderAgent(BaseAgent):
         similar_fixes: str = "",
         reviewer_feedback: str = "",
         base_files: dict[str, str] | None = None,  # full original files for applying edits
+        repo_type: str = "api",
     ) -> CoderResult:
         """Generate surgical code edits.
 
@@ -142,6 +156,9 @@ class CoderAgent(BaseAgent):
         base_files    — full original file content used as the base for str_replace
                         If omitted, code_context is used as the base (backward-compatible).
         """
+        system_prompt = _CODER_SYSTEM_CMS if repo_type == "cms" else _CODER_SYSTEM_API
+        lang_fence = _LANG_FENCE.get(repo_type, "javascript")
+
         # Strip line number prefixes so the LLM sees clean code and its old_string
         # values will match the real file content
         clean_context = {
@@ -150,7 +167,7 @@ class CoderAgent(BaseAgent):
         }
 
         file_contents_block = "\n\n".join(
-            f"### {path}\n```javascript\n{content}\n```"
+            f"### {path}\n```{lang_fence}\n{content}\n```"
             for path, content in clean_context.items()
         )
         feedback_block = (
@@ -166,7 +183,7 @@ class CoderAgent(BaseAgent):
             feedback_block=feedback_block,
         )
         raw = self.run_turn(
-            system_prompt=_CODER_SYSTEM,
+            system_prompt=system_prompt,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=8192,
         )

@@ -6,13 +6,15 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Optional
+from typing import Optional  # noqa: F401 — kept for backward compat
 
-GRAPH_PATH = (
-    Path(__file__).parent.parent.parent
-    / "tv2z_codebase_graph"
-    / "graph.json"
-)
+_ROOT = Path(__file__).parent.parent.parent
+
+GRAPH_API_PATH = _ROOT / "graph_api" / "graph.json"
+GRAPH_CMS_PATH = _ROOT / "graph_cms" / "graph.json"
+
+# Legacy alias — kept so any direct imports of GRAPH_PATH still resolve
+GRAPH_PATH = GRAPH_API_PATH
 
 # Community 0 is the Louvain remainder bin (239+ nodes) — not a meaningful cluster
 _JUNK_COMMUNITY = 0
@@ -236,12 +238,16 @@ class GraphNavigator:
         return "\n\n".join(parts)
 
 
-_singleton: Optional[GraphNavigator] = None
+_navigators: dict[str, GraphNavigator] = {}
 
 
-def get_navigator(graph_path: Path = GRAPH_PATH) -> GraphNavigator:
-    """Return the process-level GraphNavigator singleton (reads local graph.json)."""
-    global _singleton
-    if _singleton is None:
-        _singleton = GraphNavigator(graph_path)
-    return _singleton
+def get_navigator(repo_type: str = "api") -> GraphNavigator:
+    """Return a per-repo GraphNavigator singleton.
+
+    repo_type: "api" → graph_api/graph.json (Node.js)
+               "cms" → graph_cms/graph.json (PHP/Laravel)
+    """
+    if repo_type not in _navigators:
+        path = GRAPH_API_PATH if repo_type == "api" else GRAPH_CMS_PATH
+        _navigators[repo_type] = GraphNavigator(path)
+    return _navigators[repo_type]

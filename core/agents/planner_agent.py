@@ -17,6 +17,7 @@ _KEYWORD_PROMPT = """\
 Issue title: {title}
 Issue description: {description}
 
+{cross_repo_block}
 Extract 3-8 lowercase keywords that would appear as substrings in filenames \
 or short code identifiers (function names, class names, model names).
 
@@ -52,14 +53,26 @@ class PlannerAgent(BaseAgent):
         self,
         title: str,
         description: str,
+        cross_repo_context: str = "",
         max_files: int = MAX_FILES_FOR_AUTO_FIX,
     ) -> PlanResult:
         """Extract keywords via LLM, search graph, return files to fix.
 
+        cross_repo_context: summary of what the other repo's pipeline already planned/did.
         Returns PlanResult(target_files=[]) when graph has no matches,
         signalling the caller to fall back to the original LLM file-listing.
         """
-        prompt = _KEYWORD_PROMPT.format(title=title, description=description)
+        cross_repo_block = (
+            f"Cross-repo context (other repo already handled these changes — "
+            f"align field names and data structures):\n{cross_repo_context}\n"
+            if cross_repo_context
+            else ""
+        )
+        prompt = _KEYWORD_PROMPT.format(
+            title=title,
+            description=description,
+            cross_repo_block=cross_repo_block,
+        )
         raw = self.run_turn(
             system_prompt=_PLANNER_SYSTEM,
             messages=[{"role": "user", "content": prompt}],

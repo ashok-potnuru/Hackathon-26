@@ -6,5 +6,6 @@ notification: teams          # teams | slack | discord
 cloud: aws
 
 default_repos:
-  - TV2Z-IND/wlb_api
+  api: TV2Z-IND/wlb_api
+  cms: TV2Z-IND/wlb_cms
 default_branch: master
