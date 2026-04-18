@@ -112,6 +112,7 @@ class PlannerAgent(BaseAgent):
         _SKIP_PREFIXES = (
             "database/migrations/", "database/seeders/", "database/factories/",
             "docs/", "storage/", "tests/", "test/", "spec/",
+            "configs/",   # Node.js config constants — not where features are implemented
         )
         _SKIP_SUFFIXES = (".md", "Schema.js", "schema.js")
 

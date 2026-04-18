@@ -17,6 +17,9 @@ _CODER_SYSTEM_CMS = (
     "in a Laravel CMS codebase. Follow Laravel conventions: use Eloquent ORM, Artisan commands, "
     "Blade views, Livewire components, and Stancl/Tenancy multi-tenant patterns. "
     "When adding database fields, include the corresponding migration file. "
+    "IMPORTANT JSON SAFETY: your entire response is wrapped in a JSON string. "
+    "In old_string and new_string values: use single quotes for HTML attributes "
+    "(e.g. class='form-control' not class=\"form-control\") to avoid breaking JSON encoding. "
     "Always return valid JSON only — no markdown fences, no explanation outside the JSON."
 )
 
@@ -46,19 +49,21 @@ Return JSON only:
   "reasoning": "explanation of root cause and approach",
   "edits": [
     {{
-      "path": "path/to/file.js",
-      "old_string": "exact existing lines from the file (include 2-3 lines of context to be unique)",
-      "new_string": "replacement lines (same indentation as original)"
-    }},
-    ...
+      "path": "ACTUAL file path from the ### headers above (e.g. services/user_auth_service.js)",
+      "old_string": "exact existing lines verbatim from the file shown above",
+      "new_string": "replacement lines with same indentation"
+    }}
   ],
   "regression_test": "test code snippet",
   "confidence": 0.85
 }}
 
 Rules:
+- path MUST be a real path from the ### file headers shown above — NEVER invent paths
 - old_string MUST be copied EXACTLY from the file content shown above (same whitespace, same indentation)
 - old_string must include enough surrounding lines to be unique in the file
+- CRITICAL: blank lines between sections mark non-contiguous excerpts — never let
+  old_string start before a blank section gap and end after it; stay within one section
 - new_string must preserve the same indentation style as the surrounding code
 - Only include edits for lines that actually need to change — do NOT include unchanged lines
 - For adding new fields to an object, old_string should be the last existing field + closing brace/bracket
@@ -74,12 +79,15 @@ def strip_line_numbers(content: str) -> str:
     To:
         'const x = 1;\nconst y = 2;'
 
-    Also strips section headers like '# lines 1-47'.
+    Section headers like '# lines 42-67' mark non-contiguous excerpts.
+    They are replaced with a blank line so adjacent sections don't appear
+    joined — this prevents the LLM from generating old_string across a gap.
     """
     lines = []
     for line in content.split("\n"):
-        # Skip section headers like "# lines 1–47"
+        # Replace section header with blank line (keeps sections visually separate)
         if re.match(r"^# lines \d+", line):
+            lines.append("")
             continue
         # Strip "N| " prefix (handles any number of digits)
         stripped = re.sub(r"^\d+\| ?", "", line)

@@ -30,14 +30,17 @@ Your job for any incoming requirement:
 5. For each repo, provide search keywords that will locate the RUNTIME files that
    need changing — NOT docs, NOT migrations, NOT schemas unless the task is
    specifically about those.
-   - Use short identifiers: controller names, service names, function names, model names.
-   - Think: "what is the class/function that actually handles this feature?"
-   - For CMS: prefer controller names (e.g. "RegionController"), blade view names
-     (e.g. "manage-region"), Livewire component names.
-   - For API: prefer service/function names (e.g. "platformV3Settings",
-     "user_auth_service"), route handler names, DAL function names.
-   - NEVER include "docs", "schema", "migration", "seeder" as keywords unless the
-     change is ONLY about those files.
+   - CRITICAL: keywords must match FILENAMES or CLASS NAMES in the graph, not function
+     names inside files (internal functions are not indexed as graph nodes).
+   - For CMS (PHP/Laravel): use controller class names ("RegionController"), blade view
+     file names ("manage-region", "edit-region", "add-region"), model names ("Region").
+     PHP classes ARE graph nodes, so class names work as keywords.
+   - For API (Node.js): use FILE STEM names without extensions — the Node.js graph only
+     has file-level nodes, NOT function-level nodes. Use "user_auth_service",
+     "user_auth_dal", "user_auth_controller" — NOT function names like "platformV3Settings".
+     Think: "what file CONTAINS the function I need to change?"
+   - NEVER include "docs", "schema", "migration", "seeder", "config" as keywords unless
+     the change is ONLY about those files.
 
 Always respond with valid JSON only — no markdown, no explanation outside the JSON.
 """

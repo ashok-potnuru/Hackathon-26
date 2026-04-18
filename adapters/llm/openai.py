@@ -60,12 +60,21 @@ class OpenAIAdapter(LLMBase):
         return resp.data[0].embedding
 
     def chat_completion(self, system_prompt: str, messages: list, max_tokens: int = 4096) -> str:
-        resp = self._client.chat.completions.create(
-            model=self._model,
-            max_tokens=max_tokens,
-            messages=[{"role": "system", "content": system_prompt}] + messages,
-        )
-        return resp.choices[0].message.content
+        import time
+        for attempt in range(3):
+            try:
+                resp = self._client.chat.completions.create(
+                    model=self._model,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "system", "content": system_prompt}] + messages,
+                )
+                return resp.choices[0].message.content
+            except openai.RateLimitError:
+                if attempt == 2:
+                    raise
+                time.sleep(30 * (attempt + 1))  # 30s, 60s
+            except Exception:
+                raise
 
     def health_check(self) -> None:
         try:

@@ -483,11 +483,16 @@ for REPO_TYPE in meta_plan.repos:
                 message=f"autofix: {ISSUE_TITLE}",
             )
 
-            # ── Code changes block (one diff per edit) ──────────────────
+            # ── Code changes block — only edits that were actually committed ──
+            # coder_result.edits contains ALL proposed edits; only show the ones
+            # whose path is in coder_result.file_contents (i.e. old_string matched).
+            committed_paths = set(coder_result.file_contents.keys())
             code_changes_md = ""
-            if coder_result.edits:
+            applied_edits = [e for e in coder_result.edits
+                             if e.get("path", "") in committed_paths]
+            if applied_edits:
                 parts = []
-                for edit in coder_result.edits:
+                for edit in applied_edits:
                     path       = edit.get("path", "?")
                     old_string = edit.get("old_string", "")
                     new_string = edit.get("new_string", "")
