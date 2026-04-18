@@ -108,9 +108,36 @@ class PlannerAgent(BaseAgent):
                 reasoning="No keywords could be extracted from the issue.",
             )
 
-        matches = self._nav.search_nodes(keywords, top_k=30)
+        # Non-runtime paths that must never seed BFS — they crowd out real controllers.
+        _SKIP_PREFIXES = (
+            "database/migrations/", "database/seeders/", "database/factories/",
+            "docs/", "storage/", "tests/", "test/", "spec/",
+        )
+        _SKIP_SUFFIXES = (".md", "Schema.js", "schema.js")
 
-        if not matches:
+        def _is_runtime(sf: str) -> bool:
+            return (
+                sf
+                and not any(sf.endswith(s) for s in _SKIP_SUFFIXES)
+                and not any(sf.startswith(p) for p in _SKIP_PREFIXES)
+            )
+
+        # Phase 1: search with MetaPlanner seed keywords only — these name specific
+        # controllers/views so they win over broad LLM keywords like "configurations".
+        seed_kw_list = [k.lower() for k in (seed_keywords or [])]
+        seen_sf: set[str] = set()
+        phase1: list[str] = []
+        if seed_kw_list:
+            seed_matches = self._nav.search_nodes(seed_kw_list, top_k=30)
+            for m in seed_matches:
+                sf = m.source_file
+                if sf and sf not in seen_sf and _is_runtime(sf):
+                    seen_sf.add(sf)
+                    phase1.append(sf)
+
+        # Phase 2: combined search (seed + LLM keywords) for remaining slots.
+        all_matches = self._nav.search_nodes(keywords, top_k=40)
+        if not all_matches and not phase1:
             return PlanResult(
                 target_files=[],
                 change_type=change_type,
@@ -118,17 +145,15 @@ class PlannerAgent(BaseAgent):
                 reasoning="No graph nodes matched extracted keywords; falling back to LLM file selection.",
             )
 
-        # Deduplicate seed files from top-20 matches; skip doc-only files.
-        # 8 seeds gives the BFS enough starting points to reach controllers AND views.
-        seed_files: list[str] = []
-        seen: set[str] = set()
-        for m in matches[:20]:
+        phase2: list[str] = []
+        for m in all_matches:
             sf = m.source_file
-            if sf and sf not in seen and not sf.endswith(".md"):
-                seen.add(sf)
-                seed_files.append(sf)
-                if len(seed_files) >= 8:
-                    break
+            if sf and sf not in seen_sf and _is_runtime(sf):
+                seen_sf.add(sf)
+                phase2.append(sf)
+
+        matches = all_matches or seed_matches if seed_kw_list else all_matches
+        seed_files = (phase1 + phase2)[:8]
 
         related_files = self._nav.get_related_files(seed_files, max_hops=2, max_files=max_files)
 

@@ -93,8 +93,17 @@ def _apply_edits(edits: list[dict], base_files: dict[str, str]) -> dict[str, str
     base_files must contain the FULL original file content (no line number prefixes).
     Each edit is applied in order; if a file is edited multiple times the second
     edit operates on the already-patched version.
+
+    Only files where at least one edit successfully matched are included in the result —
+    this prevents committing empty/original files when old_string didn't match.
     """
-    result: dict[str, str] = {}
+    # Track which paths had a successful match and the current working content.
+    working: dict[str, str] = {}   # {path: current content after successful edits}
+    matched: set[str] = set()      # paths where ≥1 edit matched
+
+    def normalize_quotes(s: str) -> str:
+        return (s.replace("\u2018", "'").replace("\u2019", "'")
+                 .replace("\u201c", '"').replace("\u201d", '"'))
 
     for edit in edits:
         path = edit.get("path", "")
@@ -105,36 +114,39 @@ def _apply_edits(edits: list[dict], base_files: dict[str, str]) -> dict[str, str
             continue
 
         # Strip any N| line-number prefixes the LLM may have copied from context.
-        # base_files contains raw GitHub content (no prefixes), so old_string must match that.
         old_string = strip_line_numbers(old_string)
         new_string = strip_line_numbers(new_string)
 
         if not old_string:
             continue
 
-        # Use already-patched version if this file was edited earlier in the loop
-        content = result.get(path) or base_files.get(path, "")
+        # Use already-patched version if this file was edited successfully earlier.
+        # IMPORTANT: only fall back to base_files — never use "" as the base.
+        # If the file doesn't exist in base_files, skip this edit entirely so we
+        # don't commit an empty file for a hallucinated path.
+        if path in working:
+            content = working[path]
+        elif path in base_files:
+            content = base_files[path]
+        else:
+            continue  # File not in repo — skip to avoid committing empty content
 
         if old_string in content:
-            result[path] = content.replace(old_string, new_string, 1)
+            working[path] = content.replace(old_string, new_string, 1)
+            matched.add(path)
         else:
-            # Normalize quotes (straight ↔ curly) and retry — same as openclaude findActualString
-            def normalize_quotes(s: str) -> str:
-                return (s.replace("\u2018", "'").replace("\u2019", "'")
-                         .replace("\u201c", '"').replace("\u201d", '"'))
-
             norm_old = normalize_quotes(old_string)
             norm_content = normalize_quotes(content)
 
             if norm_old in norm_content:
                 idx = norm_content.index(norm_old)
                 actual_old = content[idx: idx + len(old_string)]
-                result[path] = content.replace(actual_old, new_string, 1)
-            else:
-                # Could not match — keep the full original so we never commit a truncated file
-                result[path] = content
+                working[path] = content.replace(actual_old, new_string, 1)
+                matched.add(path)
+            # If no match: don't update working[path] — keep current state
 
-    return result
+    # Only return files that had at least one successful edit.
+    return {path: working[path] for path in matched}
 
 
 @dataclass
@@ -174,9 +186,21 @@ class CoderAgent(BaseAgent):
             for path, content in code_context.items()
         }
 
+        # Cap per-file and total content to stay within token limits.
+        _MAX_PER_FILE = 5000
+        _MAX_TOTAL = 28000
+        total_chars = 0
+        capped_context: dict[str, str] = {}
+        for path, content in clean_context.items():
+            piece = content[:_MAX_PER_FILE]
+            if total_chars + len(piece) > _MAX_TOTAL:
+                break
+            capped_context[path] = piece
+            total_chars += len(piece)
+
         file_contents_block = "\n\n".join(
             f"### {path}\n```{lang_fence}\n{content}\n```"
-            for path, content in clean_context.items()
+            for path, content in capped_context.items()
         )
         feedback_block = (
             f"PREVIOUS ATTEMPT FEEDBACK (fix these issues):\n{reviewer_feedback}"

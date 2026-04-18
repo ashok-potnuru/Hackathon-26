@@ -137,9 +137,22 @@ class ExplorerAgent(BaseAgent):
         code_sections values are already graph-filtered (relevant lines only).
         ExplorerAgent further refines: which files MUST change vs. context only.
         """
+        # Cap content to stay within model token limits.
+        # Each file gets at most 4000 chars; total capped at 24000 chars.
+        _MAX_PER_FILE = 4000
+        _MAX_TOTAL = 24000
+        total_chars = 0
+        capped: dict[str, str] = {}
+        for path, content in code_sections.items():
+            piece = content[:_MAX_PER_FILE]
+            if total_chars + len(piece) > _MAX_TOTAL:
+                break
+            capped[path] = piece
+            total_chars += len(piece)
+
         sections_block = "\n\n".join(
             f"=== {path} ===\n{content}"
-            for path, content in code_sections.items()
+            for path, content in capped.items()
         )
         prompt = _EXPLORER_PROMPT.format(
             title=title,

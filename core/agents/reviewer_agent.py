@@ -81,13 +81,28 @@ class ReviewerAgent(BaseAgent):
         Returns ReviewResult(approved=True) on JSON parse failure so a
         parse error never silently kills the pipeline.
         """
+        # Cap content so we don't exceed model token limits during review.
+        _MAX_PER_FILE = 3000
+        _MAX_TOTAL = 18000
+
+        def _cap(d: dict[str, str]) -> dict[str, str]:
+            total = 0
+            out: dict[str, str] = {}
+            for path, content in d.items():
+                piece = content[:_MAX_PER_FILE]
+                if total + len(piece) > _MAX_TOTAL:
+                    break
+                out[path] = piece
+                total += len(piece)
+            return out
+
         original_block = "\n\n".join(
-            f"### {path} (original)\n```javascript\n{content}\n```"
-            for path, content in original_code.items()
+            f"### {path} (original)\n```\n{content}\n```"
+            for path, content in _cap(original_code).items()
         )
         proposed_block = "\n\n".join(
-            f"### {path} (proposed)\n```javascript\n{content}\n```"
-            for path, content in proposed_changes.items()
+            f"### {path} (proposed)\n```\n{content}\n```"
+            for path, content in _cap(proposed_changes).items()
         )
         prompt = _REVIEWER_PROMPT.format(
             description=description,
