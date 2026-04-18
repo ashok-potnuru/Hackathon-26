@@ -13,7 +13,7 @@ from core.models.pr import PRModel
 
 def run(title: str, description: str, github_repo: str = "", base_branch: str = "master",
         vc_adapter=None, create_pr: bool = True, repo_type: str = "api",
-        cross_repo_context: str = "") -> dict:
+        cross_repo_context: str = "", seed_keywords: list | None = None) -> dict:
     """
     Run the full multi-agent chain driven by job data from the Zoho webhook.
 
@@ -40,7 +40,8 @@ def run(title: str, description: str, github_repo: str = "", base_branch: str = 
     # ── STEP 1: PlannerAgent ─────────────────────────────────────────────────
     nav = get_navigator(repo_type)
     planner = PlannerAgent(llm, nav)
-    plan = planner.plan(title, description, cross_repo_context=cross_repo_context)
+    plan = planner.plan(title, description, cross_repo_context=cross_repo_context,
+                        seed_keywords=seed_keywords)
 
     if not plan.target_files:
         plan.target_files = ["services/placeholder.js"]

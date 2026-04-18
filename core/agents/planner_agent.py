@@ -18,19 +18,20 @@ Issue title: {title}
 Issue description: {description}
 
 {cross_repo_block}
-Extract 3-8 lowercase keywords that would appear as substrings in filenames \
-or short code identifiers (function names, class names, model names).
+Extract 3-8 lowercase keywords that will locate the RUNTIME source files that \
+need to change — controllers, services, models, view templates.
 
-CRITICAL RULES for keywords:
-- Use SHORT single words or two-word identifiers: "region", "regions", "auth", "settings"
-- NEVER use long compound phrases like "platform_settings_api" or "region_object" — \
-  these will not match anything in the codebase
-- Think about what the actual variable/function/filename looks like in code
-- If the issue involves a database model, include the model name AND "migration"
-- If the issue involves an API response, include the route/schema name (e.g. "auth", "settings") \
-  NOT generic terms like "api_response"
-- If the issue adds fields to a model, also include "schema" and "docs" to find \
-  OpenAPI/documentation files that must be updated
+CRITICAL RULES:
+- Use SHORT identifiers that appear as substrings in filenames or code: \
+  "region", "auth", "platform_settings"
+- Think: "what is the function/class/controller that ACTUALLY handles this feature?"
+- Prefer the specific handler name over generic words: \
+  "platformV3Settings" beats "settings"; "RegionController" beats "controller"
+- NEVER include "docs", "schema", "migration", "seeder" — those pull documentation \
+  and DB files instead of runtime code, even when those files exist in the repo
+- NEVER use long compound phrases — they will not substring-match anything
+- For a new field on a model: include the model name + the controller/service that \
+  saves/reads it
 
 Return JSON only: {{"keywords": ["kw1", "kw2", ...], "change_type": "bugfix|feature|refactor"}}"""
 
@@ -54,13 +55,15 @@ class PlannerAgent(BaseAgent):
         title: str,
         description: str,
         cross_repo_context: str = "",
+        seed_keywords: list[str] | None = None,
         max_files: int = MAX_FILES_FOR_AUTO_FIX,
     ) -> PlanResult:
         """Extract keywords via LLM, search graph, return files to fix.
 
+        seed_keywords: runtime-focused keywords from MetaPlannerAgent — merged with
+                       LLM-extracted keywords and tried first in graph search.
         cross_repo_context: summary of what the other repo's pipeline already planned/did.
-        Returns PlanResult(target_files=[]) when graph has no matches,
-        signalling the caller to fall back to the original LLM file-listing.
+        Returns PlanResult(target_files=[]) when graph has no matches.
         """
         cross_repo_block = (
             f"Cross-repo context (other repo already handled these changes — "
@@ -81,11 +84,21 @@ class PlannerAgent(BaseAgent):
 
         try:
             data = extract_json(raw)
-            keywords = [str(k).lower() for k in data.get("keywords", []) if k]
+            llm_keywords = [str(k).lower() for k in data.get("keywords", []) if k]
             change_type = str(data.get("change_type", "bugfix"))
         except Exception:
-            keywords = [w for w in title.lower().split() if len(w) > 2][:5]
+            llm_keywords = [w for w in title.lower().split() if len(w) > 2][:5]
             change_type = "bugfix"
+
+        # Merge MetaPlanner seed keywords (high-signal) in front of LLM keywords.
+        # Deduplicate while preserving order so seeds are tried first in graph search.
+        seen: set[str] = set()
+        keywords: list[str] = []
+        for kw in (seed_keywords or []) + llm_keywords:
+            kw = kw.lower()
+            if kw and kw not in seen:
+                seen.add(kw)
+                keywords.append(kw)
 
         if not keywords:
             return PlanResult(
@@ -105,15 +118,16 @@ class PlannerAgent(BaseAgent):
                 reasoning="No graph nodes matched extracted keywords; falling back to LLM file selection.",
             )
 
-        # Deduplicate seed files from top-10 matches; skip doc-only files
+        # Deduplicate seed files from top-20 matches; skip doc-only files.
+        # 8 seeds gives the BFS enough starting points to reach controllers AND views.
         seed_files: list[str] = []
         seen: set[str] = set()
-        for m in matches[:10]:
+        for m in matches[:20]:
             sf = m.source_file
             if sf and sf not in seen and not sf.endswith(".md"):
                 seen.add(sf)
                 seed_files.append(sf)
-                if len(seed_files) >= 5:
+                if len(seed_files) >= 8:
                     break
 
         related_files = self._nav.get_related_files(seed_files, max_hops=2, max_files=max_files)

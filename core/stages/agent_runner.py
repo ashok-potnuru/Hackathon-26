@@ -77,6 +77,7 @@ async def run(context: dict) -> dict:
             create_pr=True,
             repo_type=repo_type,
             cross_repo_context=cross_repo_ctx,
+            seed_keywords=meta_plan.keywords_for(repo_type),
         )
         completed[repo_type] = result
 

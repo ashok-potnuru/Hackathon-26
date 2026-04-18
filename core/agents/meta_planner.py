@@ -21,10 +21,23 @@ You are the lead architect for a two-repo streaming platform (TV2Z).
 
 Your job for any incoming requirement:
 1. Decide which repo(s) need changes: only "api", only "cms", or both.
-2. For each repo, write a PRECISE, focused change spec — exactly what code/data needs to change in that repo only.
-3. Extract shared_context: field names, data structures, default values, DB column names that BOTH repos must agree on.
-4. Return repos as an ORDERED list — the repo listed first will be implemented first.
+2. For each repo, write a PRECISE, focused change spec — exactly what code/data
+   needs to change in that repo only.
+3. Extract shared_context: field names, data structures, default values, DB column
+   names that BOTH repos must agree on.
+4. Return repos as an ORDERED list — the repo listed first is implemented first.
    Rule: if CMS writes data that the API reads, put "cms" first.
+5. For each repo, provide search keywords that will locate the RUNTIME files that
+   need changing — NOT docs, NOT migrations, NOT schemas unless the task is
+   specifically about those.
+   - Use short identifiers: controller names, service names, function names, model names.
+   - Think: "what is the class/function that actually handles this feature?"
+   - For CMS: prefer controller names (e.g. "RegionController"), blade view names
+     (e.g. "manage-region"), Livewire component names.
+   - For API: prefer service/function names (e.g. "platformV3Settings",
+     "user_auth_service"), route handler names, DAL function names.
+   - NEVER include "docs", "schema", "migration", "seeder" as keywords unless the
+     change is ONLY about those files.
 
 Always respond with valid JSON only — no markdown, no explanation outside the JSON.
 """
@@ -37,30 +50,38 @@ Description: {description}
 Return JSON only:
 {{
   "repos": ["cms", "api"],
-  "api_spec": "precise description of ONLY what needs to change in the Node.js API repo \
-(empty string if api not involved)",
-  "cms_spec": "precise description of ONLY what needs to change in the PHP/Laravel CMS repo \
-(empty string if cms not involved)",
-  "shared_context": "key facts both repos must agree on: exact field names, DB column/table names, \
-JSON keys, allowed values, defaults",
+  "api_spec": "precise description of ONLY what needs to change in the Node.js API \
+repo (empty string if api not involved)",
+  "cms_spec": "precise description of ONLY what needs to change in the PHP/Laravel \
+CMS repo (empty string if cms not involved)",
+  "api_keywords": ["short", "identifiers", "for", "runtime", "api", "files"],
+  "cms_keywords": ["short", "identifiers", "for", "runtime", "cms", "files"],
+  "shared_context": "key facts both repos must agree on: exact field names, DB \
+column/table names, JSON keys, allowed values, defaults",
   "reasoning": "one sentence explaining the split and ordering"
 }}"""
 
 
 @dataclass
 class MetaPlan:
-    repos: list[str]          # ordered execution list e.g. ["cms", "api"]
-    api_spec: str             # focused spec for API repo (empty if not needed)
-    cms_spec: str             # focused spec for CMS repo (empty if not needed)
-    shared_context: str       # facts both repos must agree on
+    repos: list[str]                    # ordered execution list e.g. ["cms", "api"]
+    api_spec: str                       # focused spec for API repo (empty if not needed)
+    cms_spec: str                       # focused spec for CMS repo (empty if not needed)
+    api_keywords: list[str]             # runtime-focused search keywords for API graph
+    cms_keywords: list[str]             # runtime-focused search keywords for CMS graph
+    shared_context: str                 # facts both repos must agree on
     reasoning: str
 
     def spec_for(self, repo_type: str) -> str:
         return self.api_spec if repo_type == "api" else self.cms_spec
 
+    def keywords_for(self, repo_type: str) -> list[str]:
+        return self.api_keywords if repo_type == "api" else self.cms_keywords
+
 
 class MetaPlannerAgent(BaseAgent):
-    """Stage 0: understands the full requirement and produces per-repo focused specs."""
+    """Stage 0: understands the full requirement and produces per-repo focused specs
+    and runtime-focused graph search keywords."""
 
     def plan(self, title: str, description: str) -> MetaPlan:
         prompt = _META_PROMPT.format(title=title, description=description)
@@ -78,6 +99,8 @@ class MetaPlannerAgent(BaseAgent):
                 repos=repos,
                 api_spec=str(data.get("api_spec", "")),
                 cms_spec=str(data.get("cms_spec", "")),
+                api_keywords=[str(k) for k in data.get("api_keywords", [])],
+                cms_keywords=[str(k) for k in data.get("cms_keywords", [])],
                 shared_context=str(data.get("shared_context", "")),
                 reasoning=str(data.get("reasoning", "")),
             )
@@ -86,6 +109,8 @@ class MetaPlannerAgent(BaseAgent):
                 repos=["api"],
                 api_spec=description,
                 cms_spec="",
+                api_keywords=[],
+                cms_keywords=[],
                 shared_context="",
                 reasoning="meta-planning failed — defaulting to api",
             )

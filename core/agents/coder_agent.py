@@ -104,6 +104,14 @@ def _apply_edits(edits: list[dict], base_files: dict[str, str]) -> dict[str, str
         if not path or not old_string:
             continue
 
+        # Strip any N| line-number prefixes the LLM may have copied from context.
+        # base_files contains raw GitHub content (no prefixes), so old_string must match that.
+        old_string = strip_line_numbers(old_string)
+        new_string = strip_line_numbers(new_string)
+
+        if not old_string:
+            continue
+
         # Use already-patched version if this file was edited earlier in the loop
         content = result.get(path) or base_files.get(path, "")
 

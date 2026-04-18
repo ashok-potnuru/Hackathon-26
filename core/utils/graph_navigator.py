@@ -206,8 +206,18 @@ class GraphNavigator:
             if any(kw in node_text for kw in kws):
                 hit_lines.add(line_num)
 
+        # Text-based search: scan the actual file lines for specific keywords (≥5 chars).
+        # This catches functions like `platformV3Settings` that exist in the file but
+        # whose graph node is at a different location than where the function is defined.
+        specific_kws = [kw for kw in kws if len(kw) >= 5]
+        if specific_kws:
+            for i, line in enumerate(lines, 1):
+                line_lower = line.lower()
+                if any(kw in line_lower for kw in specific_kws):
+                    hit_lines.add(i)
+
         if not hit_lines:
-            # No keyword-matched nodes — send start of file capped at 3000 chars
+            # No matches at all — send start of file capped at 3000 chars
             return file_content[:3000]
 
         # Build ranges: hit line ± context_lines, clamped to file bounds

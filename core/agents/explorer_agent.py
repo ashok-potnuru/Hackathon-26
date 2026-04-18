@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from core.agents.base_agent import BaseAgent
@@ -63,30 +64,55 @@ class ExplorerResult:
 
 
 def _parse_line_range(range_str: str, full_content: str) -> str:
-    """Extract specific lines from file content given a range string like '42-67, 89-94'."""
-    lines = full_content.splitlines()
-    total = len(lines)
-    parts = []
+    """Extract specific lines from file content given a range string like '42-67, 89-94'.
 
+    Handles content that already has N| line-number prefixes (from the graph filter).
+    In that case, looks up lines by their actual original-file line number instead of
+    treating lines as 1-indexed positions — preventing double-prefix corruption.
+    """
+    raw_lines = full_content.splitlines()
+
+    # Build a map {original_line_number: bare_text} from N| prefixed content.
+    # If no prefixes are found, fall back to positional indexing (1-based).
+    line_map: dict[int, str] = {}
+    for raw in raw_lines:
+        m = re.match(r'^(\d+)\| ?(.*)', raw)
+        if m:
+            line_map[int(m.group(1))] = m.group(2)
+
+    use_map = bool(line_map)
+    positional = [ln for ln in raw_lines if not re.match(r'^(\d+)\| ?|^# lines ', ln)]
+
+    parts: list[str] = []
     for segment in range_str.split(","):
         segment = segment.strip()
         if not segment:
             continue
-        if "-" in segment:
-            try:
-                start, end = segment.split("-", 1)
-                s, e = max(1, int(start.strip())), min(total, int(end.strip()))
-                section = "\n".join(f"{i}| {lines[i-1]}" for i in range(s, e + 1))
-                parts.append(f"# lines {s}–{e}\n{section}")
-            except (ValueError, IndexError):
-                pass
-        else:
-            try:
+        try:
+            if "-" in segment:
+                start_s, end_s = segment.split("-", 1)
+                s, e = int(start_s.strip()), int(end_s.strip())
+                if use_map:
+                    selected = {ln: txt for ln, txt in line_map.items() if s <= ln <= e}
+                    if selected:
+                        section = "\n".join(
+                            f"{ln}| {txt}" for ln, txt in sorted(selected.items())
+                        )
+                        parts.append(f"# lines {s}–{e}\n{section}")
+                else:
+                    s, e = max(1, s), min(len(positional), e)
+                    section = "\n".join(
+                        f"{i}| {positional[i-1]}" for i in range(s, e + 1)
+                    )
+                    parts.append(f"# lines {s}–{e}\n{section}")
+            else:
                 ln = int(segment)
-                if 1 <= ln <= total:
-                    parts.append(f"{ln}| {lines[ln-1]}")
-            except ValueError:
-                pass
+                if use_map and ln in line_map:
+                    parts.append(f"{ln}| {line_map[ln]}")
+                elif not use_map and 1 <= ln <= len(positional):
+                    parts.append(f"{ln}| {positional[ln-1]}")
+        except (ValueError, IndexError):
+            pass
 
     return "\n\n".join(parts) if parts else full_content[:2000]
 
