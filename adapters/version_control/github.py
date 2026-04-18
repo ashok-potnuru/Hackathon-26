@@ -35,15 +35,25 @@ class GitHubAdapter(VersionControlBase):
         return r.json()
 
     def get_file(self, repo: str, path: str, branch: str = "main") -> str:
-        data = self._get(f"{_API}/repos/{repo}/contents/{path}", params={"ref": branch})
+        data = self._get(f"{_API}/repos/{repo}/contents/{path}", params={"ref": self._resolve(repo, branch)})
         return base64.b64decode(data["content"]).decode()
 
+    def _default_branch(self, repo: str) -> str:
+        if not hasattr(self, "_branch_cache"):
+            self._branch_cache = {}
+        if repo not in self._branch_cache:
+            self._branch_cache[repo] = self._get(f"{_API}/repos/{repo}")["default_branch"]
+        return self._branch_cache[repo]
+
+    def _resolve(self, repo: str, branch: str) -> str:
+        return self._default_branch(repo) if branch == "main" else branch
+
     def list_files(self, repo: str, branch: str = "main") -> list:
-        tree = self._get(f"{_API}/repos/{repo}/git/trees/{branch}", params={"recursive": "1"})
+        tree = self._get(f"{_API}/repos/{repo}/git/trees/{self._resolve(repo, branch)}", params={"recursive": "1"})
         return [i["path"] for i in tree.get("tree", []) if i["type"] == "blob"]
 
     def create_branch(self, repo: str, name: str, base: str) -> None:
-        sha = self._get(f"{_API}/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+        sha = self._get(f"{_API}/repos/{repo}/git/refs/heads/{self._resolve(repo, base)}")["object"]["sha"]
         self._post(f"{_API}/repos/{repo}/git/refs", {"ref": f"refs/heads/{name}", "sha": sha})
 
     def commit_changes(self, repo: str, branch: str, files: dict, message: str) -> None:
@@ -61,7 +71,7 @@ class GitHubAdapter(VersionControlBase):
     def create_pr(self, pr: PRModel) -> PRModel:
         data = self._post(f"{_API}/repos/{pr.repo}/pulls", {
             "title": pr.title, "body": pr.body,
-            "head": pr.branch_name, "base": pr.base_branch, "draft": pr.draft,
+            "head": pr.branch_name, "base": self._resolve(pr.repo, pr.base_branch), "draft": pr.draft,
         })
         pr.url = data["html_url"]
         pr.number = data["number"]

@@ -34,3 +34,7 @@ htmlcov/
 
 # Mypy
 .mypy_cache/
+lib
+bin
+pyvenv.cfg
+path
