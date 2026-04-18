@@ -3,6 +3,8 @@ import json
 from core.constants import MAX_FIX_RETRIES
 from core.exceptions import FixGenerationError, SecurityScanError
 from core.models.fix import FixModel
+from core.orchestrator import MultiAgentOrchestrator
+from core.utils.graph_navigator import get_navigator
 
 
 def _build_fix_context(issue, research: dict, work_type: str) -> dict:
@@ -29,8 +31,18 @@ async def run(context: dict) -> dict:
     issue = context["issue"]
     research = context["research"]
     llm = context["adapters"]["llm"]
+    vc = context["adapters"]["version_control"]
     work_type = context.get("work_type", "bugfix")
 
+    # Multi-agent path: active when research stage used graph-based file discovery
+    plan = research.get("plan")
+    if plan and plan.target_files:
+        nav = get_navigator()
+        orch = MultiAgentOrchestrator(llm, vc, nav)
+        fix = orch.run(issue, plan, similar_fixes=research.get("similar_fixes", ""))
+        return {**context, "fix": fix}
+
+    # Fallback: original single-LLM path (unchanged)
     fix_ctx = _build_fix_context(issue, research, work_type)
 
     last_err = None

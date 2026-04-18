@@ -1,5 +1,7 @@
+from core.agents.planner_agent import PlannerAgent
 from core.constants import MAX_FILES_FOR_AUTO_FIX
 from core.exceptions import PRTooLargeError
+from core.utils.graph_navigator import get_navigator
 
 
 async def run(context: dict) -> dict:
@@ -15,6 +17,28 @@ async def run(context: dict) -> dict:
     code_parts: list = []
     all_relevant: list = []
 
+    # Graph-based file discovery: reads local graph.json (committed to repo)
+    nav = get_navigator()
+    planner = PlannerAgent(llm, nav)
+    plan = planner.plan(issue.title, issue.description)
+
+    if plan.target_files:
+        repo = issue.affected_repos[0] if issue.affected_repos else ""
+        all_relevant = plan.target_files[:MAX_FILES_FOR_AUTO_FIX]
+        for path in all_relevant:
+            try:
+                content = vc.get_file(repo, path, issue.target_branch)
+                code_parts.append(f"# {repo}/{path}\n{content}")
+            except Exception:
+                pass
+        return {**context, "research": {
+            "code_context": "\n\n".join(code_parts),
+            "similar_fixes": similar_text,
+            "relevant_files": all_relevant,
+            "plan": plan,
+        }}
+
+    # Fallback: original LLM file-listing path (unchanged)
     for repo in issue.affected_repos[:2]:
         try:
             files = vc.list_files(repo, issue.target_branch)
