@@ -34,7 +34,7 @@ from core.models.pr import PRModel
 CREATE_PR        = True        # create a Draft PR after each repo's review
 BASE_BRANCH_API  = "SIT"
 BASE_BRANCH_CMS  = "SIT"
-MAX_FILES        = 8           # max files to fetch per repo (matches planner seed limit)
+MAX_FILES        = 15          # gpt-4.5 1M context — fetch more files for better coverage
 TEST_SINGLE_REPO = ""          # force "api" or "cms" to skip MetaPlanner routing
 
 API_REPO = os.getenv("API_REPO", "ashok-potnuru/hackathon_wlb_api")
@@ -348,32 +348,25 @@ for REPO_TYPE in meta_plan.repos:
             code_sections[path] = f"// file not found in {repo}: {path} ({e})"
             log(f"✗ {path}  → not found: {e}", indent=4)
 
-    # ── STAGE 3: GraphNavigator line filter ───────────────────────────────────
+    # ── STAGE 3: GraphNavigator line filter (hint only with 1M context) ─────────
     subheader(f"STAGE 3 — Graph Line Filter [{REPO_TYPE}]")
-    log("What it does: uses graph node line numbers to extract ONLY the relevant")
-    log("              lines from each file (not the full file — saves tokens).")
+    log("What it does: with gpt-4.5 1M token context, full files are sent.")
+    log("              Graph filter runs for logging only — not used to truncate.")
 
-    filtered_sections: dict[str, str] = {}
     for path, content in code_sections.items():
-        if content.startswith("// file not found"):
-            filtered_sections[path] = content
-            continue
-        filtered = nav.get_relevant_lines(path, content, plan.keywords_extracted)
-        filtered_sections[path] = filtered
-        original_lines = content.count("\n") + 1
-        filtered_lines = filtered.count("\n") + 1
-        log(f"{path}: {original_lines} lines → {filtered_lines} lines sent to Explorer",
-            indent=4)
+        if not content.startswith("// file not found"):
+            log(f"{path}: {content.count(chr(10))+1} lines (full file sent to Explorer)",
+                indent=4)
 
     # ── STAGE 4: ExplorerAgent ────────────────────────────────────────────────
     subheader(f"STAGE 4 — ExplorerAgent [{REPO_TYPE}]")
-    log("What it does: reads the graph-filtered code in READ-ONLY mode,")
+    log("What it does: reads the FULL file content in READ-ONLY mode,")
     log("              labels each file must_change or context_only.")
 
     print(f"\n  [{ts()}] Running ExplorerAgent...")
     explorer        = ExplorerAgent(llm)
     explorer_result = explorer.explore(ISSUE_TITLE, spec or ISSUE_DESCRIPTION,
-                                       filtered_sections)
+                                       code_sections)   # full content, not filtered
 
     subheader(f"ExplorerAgent [{REPO_TYPE}] output")
     log(f"Summary: {explorer_result.summary}")

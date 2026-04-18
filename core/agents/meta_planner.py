@@ -91,7 +91,7 @@ class MetaPlannerAgent(BaseAgent):
         raw = self.run_turn(
             system_prompt=_META_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1024,
+            max_tokens=4096,   # gpt-4.5: more room for detailed per-repo specs
         )
         try:
             data = extract_json(raw)

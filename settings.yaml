@@ -1,5 +1,5 @@
 llm: openai          # claude | openai | gemini
-model: gpt-4o        # model name for the active llm provider
+model: gpt-5.4       # model name for the active llm provider
 issue_tracker: zoho_sprints  # zoho_sprints | jira | linear
 version_control: github      # github | gitlab | azure_devops
 notification: teams          # teams | slack | discord

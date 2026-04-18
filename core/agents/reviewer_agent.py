@@ -81,28 +81,26 @@ class ReviewerAgent(BaseAgent):
         Returns ReviewResult(approved=True) on JSON parse failure so a
         parse error never silently kills the pipeline.
         """
-        # Cap content so we don't exceed model token limits during review.
-        _MAX_PER_FILE = 3000
-        _MAX_TOTAL = 18000
+        # With gpt-4.5's 1M token context we can review full file content.
+        _MAX_TOTAL = 800_000
 
-        def _cap(d: dict[str, str]) -> dict[str, str]:
+        def _full(d: dict[str, str]) -> dict[str, str]:
             total = 0
             out: dict[str, str] = {}
             for path, content in d.items():
-                piece = content[:_MAX_PER_FILE]
-                if total + len(piece) > _MAX_TOTAL:
+                if total + len(content) > _MAX_TOTAL:
                     break
-                out[path] = piece
-                total += len(piece)
+                out[path] = content
+                total += len(content)
             return out
 
         original_block = "\n\n".join(
             f"### {path} (original)\n```\n{content}\n```"
-            for path, content in _cap(original_code).items()
+            for path, content in _full(original_code).items()
         )
         proposed_block = "\n\n".join(
             f"### {path} (proposed)\n```\n{content}\n```"
-            for path, content in _cap(proposed_changes).items()
+            for path, content in _full(proposed_changes).items()
         )
         prompt = _REVIEWER_PROMPT.format(
             description=description,
@@ -112,7 +110,7 @@ class ReviewerAgent(BaseAgent):
         raw = self.run_turn(
             system_prompt=_REVIEWER_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1024,
+            max_tokens=4096,
         )
 
         try:

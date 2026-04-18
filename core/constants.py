@@ -11,4 +11,4 @@ class PipelineStage:
     DEPLOY = "deploy"
 
 
-MAX_FILES_FOR_AUTO_FIX = 10
+MAX_FILES_FOR_AUTO_FIX = 15

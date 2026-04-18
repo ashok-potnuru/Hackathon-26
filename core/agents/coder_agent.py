@@ -194,21 +194,20 @@ class CoderAgent(BaseAgent):
             for path, content in code_context.items()
         }
 
-        # Cap per-file and total content to stay within token limits.
-        _MAX_PER_FILE = 5000
-        _MAX_TOTAL = 28000
+        # With gpt-4.5's 1M token context we send full file content — no per-file cap.
+        # Keep a generous safety ceiling only.
+        _MAX_TOTAL = 800_000   # ~200k tokens
         total_chars = 0
-        capped_context: dict[str, str] = {}
+        full_context: dict[str, str] = {}
         for path, content in clean_context.items():
-            piece = content[:_MAX_PER_FILE]
-            if total_chars + len(piece) > _MAX_TOTAL:
+            if total_chars + len(content) > _MAX_TOTAL:
                 break
-            capped_context[path] = piece
-            total_chars += len(piece)
+            full_context[path] = content
+            total_chars += len(content)
 
         file_contents_block = "\n\n".join(
             f"### {path}\n```{lang_fence}\n{content}\n```"
-            for path, content in capped_context.items()
+            for path, content in full_context.items()
         )
         feedback_block = (
             f"PREVIOUS ATTEMPT FEEDBACK (fix these issues):\n{reviewer_feedback}"
@@ -225,7 +224,7 @@ class CoderAgent(BaseAgent):
         raw = self.run_turn(
             system_prompt=system_prompt,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=8192,
+            max_tokens=16_384,   # gpt-4.5 supports larger outputs
         )
 
         try:
