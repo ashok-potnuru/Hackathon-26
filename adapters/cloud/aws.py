@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 import boto3
 
@@ -32,7 +33,11 @@ class AWSAdapter(CloudBase):
         if not msgs:
             return None
         msg = msgs[0]
-        body = json.loads(msg["Body"])
+        try:
+            body = json.loads(msg["Body"])
+        except json.JSONDecodeError:
+            clean = re.sub(r'[\x00-\x1f]', ' ', msg["Body"])
+            body = json.loads(clean)
         body["_receipt_handle"] = msg["ReceiptHandle"]
         return body
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 
 from core.agents.base_agent import BaseAgent
+from core.utils.json_utils import extract_json
 
 _CODER_SYSTEM = (
     "You are an expert software engineer fixing bugs and implementing features "
@@ -172,10 +172,8 @@ class CoderAgent(BaseAgent):
         )
 
         try:
-            start = raw.index("{")
-            end = raw.rindex("}") + 1
-            data = json.loads(raw[start:end])
-        except (ValueError, json.JSONDecodeError):
+            data = extract_json(raw)
+        except Exception:
             return CoderResult(
                 file_contents={},
                 reasoning="JSON parse failed",

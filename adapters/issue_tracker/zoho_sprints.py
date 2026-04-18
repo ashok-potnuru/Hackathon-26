@@ -7,8 +7,8 @@ from core.constants import IssuePriority
 from core.exceptions import AdapterError
 from core.models.issue import IssueModel
 
-_TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
-_API_BASE = "https://sprintsapi.zoho.com/zsapi"
+_TOKEN_URL = "https://accounts.zoho.in/oauth/v2/token"
+_API_BASE = "https://sprintsapi.zoho.in/zsapi"
 
 _PRIORITY_MAP = {
     "high": IssuePriority.HIGH,
@@ -56,7 +56,7 @@ class ZohoSprintsAdapter(IssueTrackerBase):
         return {"Authorization": f"Zoho-oauthtoken {self._token()}"}
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        url = f"{_API_BASE}/team/{self._team_id}{path}"
+        url = f"{_API_BASE}/teams/{self._team_id}{path}"
         resp = requests.request(method, url, headers=self._headers(), **kwargs)
         if resp.status_code == 401:
             self._access_token = None
@@ -66,9 +66,17 @@ class ZohoSprintsAdapter(IssueTrackerBase):
 
     # ── IssueTrackerBase ───────────────────────────────────────────────────
 
-    def get_issue(self, composite_id: str) -> IssueModel:
+    def get_issue(self, composite_id: str, project_id: str = "", sprint_id: str = "") -> IssueModel:
         _, item_id = _split_id(composite_id)
-        data = self._request("GET", f"/item/{item_id}/").json()
+
+        if project_id and sprint_id:
+            data = self._request("GET", f"/projects/{project_id}/sprints/{sprint_id}/item/{item_id}/").json()
+        elif project_id:
+            data = self._request("GET", f"/projects/{project_id}/item/{item_id}/").json()
+        elif sprint_id:
+            data = self._request("GET", f"/sprints/{sprint_id}/item/{item_id}/").json()
+        else:
+            data = self._request("GET", f"/item/{item_id}/").json()
 
         item = data.get("item", [{}])
         item = item[0] if isinstance(item, list) and item else item
@@ -82,7 +90,7 @@ class ZohoSprintsAdapter(IssueTrackerBase):
             description=item.get("description", ""),
             priority=prio,
             zoho_status=item.get("statusName", "Open"),
-            tenant=item_type,   # "issue" → bugfix, "task" → feature in intake
+            tenant=item_type,
         )
 
     def post_comment(self, composite_id: str, message: str) -> None:
@@ -133,6 +141,11 @@ class ZohoSprintsAdapter(IssueTrackerBase):
 
     def health_check(self) -> None:
         try:
-            self._request("GET", "/sprints/")
+            resp = requests.get(f"{_API_BASE}/teams/", headers=self._headers(), timeout=10)
+            resp.raise_for_status()
+            if resp.json().get("status") == "failed":
+                raise AdapterError(resp.json().get("message", "unknown error"))
+        except AdapterError:
+            raise
         except Exception as e:
             raise AdapterError(f"ZohoSprints health check failed: {e}")

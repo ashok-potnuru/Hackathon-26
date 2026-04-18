@@ -25,13 +25,6 @@ from core.models.pr import PRModel
 GITHUB_REPO  = "ashok-potnuru/hackathon_wlb_api"   # repo to push the PR to
 BASE_BRANCH  = "SIT"                                # branch to target (PR base)
 CREATE_PR    = True                                 # set False to skip PR creation
-# ── Change these to test a different bug ─────────────────────────────────────
-# ISSUE_TITLE       = "Add new two new keys in my auth paltform settings api response under region object these keys add in regions mode"
-# ISSUE_DESCRIPTION = (
-#     "keys names are max_video_height, max_video_bitrate_kbps"
-#     "Error log shows: TypeError: Cannot read property 'amount' of undefined "
-#     "inside the charge handler."
-# )
 
 ISSUE_TITLE       = "Add two new keys in Auth Platform Settings API response under region object and update Regions model"
 

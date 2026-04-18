@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 
 from core.agents.base_agent import BaseAgent
+from core.utils.json_utils import extract_json
 
 _EXPLORER_SYSTEM = """\
 You are a read-only code explorer. Your only job is to read code sections and \
@@ -127,10 +127,8 @@ class ExplorerAgent(BaseAgent):
         )
 
         try:
-            start = raw.index("{")
-            end = raw.rindex("}") + 1
-            data = json.loads(raw[start:end])
-        except (ValueError, json.JSONDecodeError):
+            data = extract_json(raw)
+        except Exception:
             # Fallback: treat all files as must_change with full content
             return ExplorerResult(
                 must_change_files=code_sections,
