@@ -87,9 +87,12 @@ async def run(context: dict) -> dict:
     # ZohoSprintsAdapter sets issue.tenant to "task" (feature) or "issue" (bugfix)
     work_type = "feature" if issue.tenant == "task" else "bugfix"
 
-    adapters["notification"].send_message(
-        "", f"AutoFix AI picked up {work_type} [{issue.id}]: {issue.title} — analyzing..."
-    )
+    try:
+        adapters["notification"].send_message(
+            "", f"AutoFix AI picked up {work_type} [{issue.id}]: {issue.title} — analyzing..."
+        )
+    except Exception:
+        pass
 
     raw_attachments = [] if from_payload else issue_tracker.get_attachments(issue.id)
 

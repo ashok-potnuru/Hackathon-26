@@ -34,6 +34,41 @@ async def run_pipeline(payload: dict, adapters: dict) -> None:
         if context is None:
             return
 
+    issue = context.get("issue")
+    issue_title = issue.title if issue else issue_id
+    pr_url = context.get("pr_url")
+
+    if pr_url:
+        try:
+            settings = adapters.get("settings", {})
+            base_branch = settings.get("default_branch", "SIT")
+            branch = context.get("branch_name", "")
+            # Also include second repo PR if multi-repo run
+            meta_plan = context.get("meta_plan")
+            extra_urls = []
+            if meta_plan and len(meta_plan.repos) > 1:
+                second = meta_plan.repos[1]
+                second_url = context.get(f"{second}_pr_url")
+                if second_url:
+                    extra_urls.append((second, second_url))
+            adapters["notification"].notify_pr_raised(
+                issue_id=issue_id,
+                title=issue_title,
+                pr_url=pr_url,
+                branch=branch,
+                base_branch=base_branch,
+                extra_pr_urls=extra_urls,
+            )
+        except Exception as e:
+            logger.warning(f"Teams PR notification failed: {e}")
+    else:
+        try:
+            adapters["notification"].send_alert(
+                "", f"AutoFix completed for [{issue_id}] but no code changes were generated: {issue_title}"
+            )
+        except Exception:
+            pass
+
 
 async def _run_stage(stage_name: str, stage_fn, context: dict, issue_id: str, tenant: str) -> dict | None:
     span = tracer.start_span(context["trace_id"], stage_name, issue_id)

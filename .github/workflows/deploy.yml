@@ -19,6 +19,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image
@@ -26,4 +27,16 @@ jobs:
           docker build -t ${{ secrets.ECR_REPO }}:latest .
           docker push ${{ secrets.ECR_REPO }}:latest
 
-      # TODO: add ECS deploy step
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+              | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO }}
+            cd /opt/autofix
+            ECR_IMAGE=${{ secrets.ECR_REPO }}:latest docker compose pull
+            ECR_IMAGE=${{ secrets.ECR_REPO }}:latest docker compose up -d
+            docker image prune -f

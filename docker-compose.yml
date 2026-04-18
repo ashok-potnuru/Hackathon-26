@@ -1,0 +1,13 @@
+services:
+  webhook:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["python", "-m", "core.queue.worker"]
+    env_file: .env
+    restart: unless-stopped

@@ -11,6 +11,10 @@ from core.pipeline import run_pipeline
 logger = get_logger(__name__)
 
 
+_MAX_RETRIES = 3
+_retry_counts: dict[str, int] = {}
+
+
 def run_worker() -> None:
     adapters = load_adapters()
     cloud = adapters["cloud"]
@@ -27,10 +31,18 @@ def run_worker() -> None:
         issue_id = job.get("issue_id", "unknown")
         try:
             asyncio.run(run_pipeline(job, adapters))
+            _retry_counts.pop(issue_id, None)
             if receipt:
                 cloud.delete_job(receipt)
         except Exception as e:
-            logger.error(f"Pipeline failed for issue {issue_id}: {e}")
+            _retry_counts[issue_id] = _retry_counts.get(issue_id, 0) + 1
+            attempt = _retry_counts[issue_id]
+            logger.error(f"Pipeline failed for issue {issue_id} (attempt {attempt}/{_MAX_RETRIES}): {e}")
+            if attempt >= _MAX_RETRIES:
+                logger.error(f"Max retries reached for {issue_id} — dropping message")
+                _retry_counts.pop(issue_id, None)
+                if receipt:
+                    cloud.delete_job(receipt)
             try:
                 notification.send_alert("", f"AutoFix pipeline failed for issue {issue_id}: {e}")
             except Exception:

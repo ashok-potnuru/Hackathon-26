@@ -89,6 +89,7 @@ async def run(context: dict) -> dict:
             **context,
             "fix": result["coder_result"],
             "pr_url": result["pr_url"],
+            "branch_name": result.get("branch_name", ""),
             "agent_result": result,
             "meta_plan": meta_plan,
         }
@@ -99,6 +100,7 @@ async def run(context: dict) -> dict:
         **context,
         "fix": completed[first]["coder_result"],
         "pr_url": completed[first].get("pr_url"),
+        "branch_name": completed[first].get("branch_name", ""),
         f"{second}_pr_url": completed[second].get("pr_url"),
         "agent_result": completed,
         "meta_plan": meta_plan,

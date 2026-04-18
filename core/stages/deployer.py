@@ -40,4 +40,11 @@ async def run(context: dict) -> dict:
     execution_id = resp["pipelineExecutionId"]
     logger.info(f"deploy: pipeline={pipeline_name} executionId={execution_id}")
 
+    try:
+        context["adapters"]["notification"].send_success(
+            f"Deployment started for [{issue_id}] — pipeline: {pipeline_name} | executionId: {execution_id}"
+        )
+    except Exception:
+        pass
+
     return {**context, "execution_id": execution_id}

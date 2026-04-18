@@ -226,6 +226,104 @@ def _now() -> str:
 # Smoke test
 # ──────────────────────────────────────────────
 
+def notify_pr_raised(issue_id: str, title: str, pr_url: str, branch: str, base_branch: str = "master", extra_pr_urls: list = None):
+    import urllib.parse
+    base = f"{BASE_URL}/api/approvals/confirm"
+    params = urllib.parse.urlencode({
+        "issue_id": issue_id,
+        "title": title,
+        "pr_url": pr_url,
+        "branch": base_branch,
+    })
+    approve_url = f"{base}?action=approved&{params}"
+    deny_url = f"{base}?action=denied&{params}"
+
+    facts = [
+        {"name": "Issue ID", "value": issue_id},
+        {"name": "Branch", "value": branch},
+        {"name": "Deploy To", "value": base_branch},
+        {"name": "PR (api)", "value": pr_url},
+    ]
+    actions = [{"@type": "OpenUri", "name": "View PR (api)", "targets": [{"os": "default", "uri": pr_url}]}]
+
+    for repo_type, url in (extra_pr_urls or []):
+        facts.append({"name": f"PR ({repo_type})", "value": url})
+        actions.append({"@type": "OpenUri", "name": f"View PR ({repo_type})", "targets": [{"os": "default", "uri": url}]})
+
+    facts.append({"name": "Time", "value": _now()})
+    actions += [
+        {"@type": "OpenUri", "name": "Approve & Deploy", "targets": [{"os": "default", "uri": approve_url}]},
+        {"@type": "OpenUri", "name": "Reject", "targets": [{"os": "default", "uri": deny_url}]},
+    ]
+
+    _post({
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": "0076D7",
+        "summary": f"AutoFix PR Ready — {title}",
+        "sections": [{
+            "activityTitle": "AutoFix PR Raised",
+            "activitySubtitle": title,
+            "activityText": "Review and merge the PR(s) on GitHub, then click Approve & Deploy.",
+            "facts": facts,
+        }],
+        "potentialAction": actions,
+    })
+    print(f"PR notification sent -> {pr_url}")
+
+
+def notify_deployment_status(issue_id: str, title: str, pr_url: str, action: str):
+    approved = action == "approved"
+    color = "00C853" if approved else "FF5252"
+    status = "Approved & Deployed" if approved else "Rejected"
+    icon = "✅" if approved else "❌"
+
+    _post({
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": color,
+        "summary": f"AutoFix {status} — {title}",
+        "sections": [{
+            "activityTitle": f"{icon} {status}",
+            "activitySubtitle": title,
+            "facts": [
+                {"name": "Issue ID", "value": issue_id},
+                {"name": "PR", "value": pr_url or "N/A"},
+                {"name": "Time", "value": _now()},
+            ]
+        }]
+    })
+
+
+class TeamsAdapter:
+    def send_message(self, _channel: str, text: str):
+        send_simple_message(text)
+
+    def send_simple_message(self, text: str):
+        send_simple_message(text)
+
+    def send_rich_card(self, title: str, message: str, color: str = "0076D7"):
+        send_rich_card(title, message, color)
+
+    def send_alert(self, _channel: str, message: str):
+        send_alert(message)
+
+    def send_success(self, message: str):
+        send_success(message)
+
+    def send_deployment_approval(self, **kwargs):
+        send_deployment_approval(**kwargs)
+
+    def send_pr_approval(self, **kwargs):
+        send_pr_approval(**kwargs)
+
+    def notify_pr_raised(self, issue_id: str, title: str, pr_url: str, branch: str, base_branch: str = "master", extra_pr_urls: list = None):
+        notify_pr_raised(issue_id, title, pr_url, branch, base_branch, extra_pr_urls)
+
+    def notify_deployment_status(self, issue_id: str, title: str, pr_url: str, action: str):
+        notify_deployment_status(issue_id, title, pr_url, action)
+
+
 if __name__ == "__main__":
 
     # print("Test 1: plain message")

@@ -2,24 +2,16 @@
 fastapi
 uvicorn
 
-# AI / LLM
+# LLM
 anthropic
 openai
 google-generativeai
 
-# Vector Store
-chromadb
-pinecone-client
-
-# GitHub
-PyGithub
-
-# Queue
-boto3
-
-# HTTP
-httpx
+# GitHub / HTTP
 requests
+
+# Queue / AWS
+boto3
 
 # Config
 pyyaml
@@ -29,9 +21,5 @@ python-dotenv
 pdfplumber
 python-docx
 
-# Security scan
-bandit
-
-# Testing
-pytest
-pytest-asyncio
+# Watchfiles (worker hot-reload in dev)
+watchfiles

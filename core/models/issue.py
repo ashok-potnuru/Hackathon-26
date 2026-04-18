@@ -10,6 +10,6 @@ class IssueModel:
     attachments: List[str] = field(default_factory=list)
     priority: str = "normal"
     affected_repos: List[str] = field(default_factory=list)
-    target_branch: str = "develop"
+    target_branch: str = ""
     zoho_status: str = "Open"
     tenant: str = "default"

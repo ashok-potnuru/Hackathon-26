@@ -1,5 +1,7 @@
-import os, sys, re, datetime
+import os, sys, re, datetime, logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+logger = logging.getLogger(__name__)
 
 from scripts._llm_loader import load_llm
 from core.agents.planner_agent import PlannerAgent
@@ -43,6 +45,7 @@ def run(title: str, description: str, github_repo: str = "", base_branch: str = 
     plan = planner.plan(title, description, cross_repo_context=cross_repo_context,
                         seed_keywords=seed_keywords)
 
+    logger.info(f"planner: target_files={plan.target_files} keywords={plan.keywords_extracted}")
     if not plan.target_files:
         plan.target_files = ["services/placeholder.js"]
 
@@ -90,6 +93,13 @@ def run(title: str, description: str, github_repo: str = "", base_branch: str = 
         proposed_changes=coder_result.file_contents,
     )
 
+    logger.info(
+        f"coder: confidence={coder_result.confidence:.0%} "
+        f"edits={len(coder_result.edits)} files={list(coder_result.file_contents.keys())} "
+        f"reasoning={coder_result.reasoning!r:.120}"
+    )
+    logger.info(f"reviewer: verdict={reviewer_result.verdict} approved={reviewer_result.approved}")
+
     # ── STEP 5: GitHub PR ────────────────────────────────────────────────────
     pr_url = None
     if create_pr and coder_result.file_contents:
@@ -132,8 +142,9 @@ def run(title: str, description: str, github_repo: str = "", base_branch: str = 
                 draft=True,
             ))
             pr_url = pr.url
+            logger.info(f"PR created: {pr_url} branch={branch_name}")
         except Exception as e:
-            print(f"PR creation failed: {e}")
+            logger.error(f"PR creation failed: {e}", exc_info=True)
 
     return {
         "plan": plan,
@@ -141,4 +152,5 @@ def run(title: str, description: str, github_repo: str = "", base_branch: str = 
         "coder_result": coder_result,
         "reviewer_result": reviewer_result,
         "pr_url": pr_url,
+        "branch_name": branch_name if pr_url else "",
     }
