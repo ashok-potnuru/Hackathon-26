@@ -1,128 +1,276 @@
 # AutoFix AI
 
-Automatically fixes bugs from Zoho Desk issues, raises a Draft PR on GitHub, and notifies Microsoft Teams — with mandatory developer review and CI before merge.
+Autonomous issue-to-deployment pipeline. A Zoho Sprints ticket comes in, a 5-agent AI system writes the fix, a Draft PR is raised on GitHub, the team approves in Microsoft Teams with one click, and AWS CodePipeline deploys it — zero manual coding.
 
-## Architecture
+## How It Works
 
-8-stage pipeline: Intake → Triage → Research → Fix Generation → PR Creation → Developer Review → CI/CD → Closure
-
-All integrations (LLM, issue tracker, VCS, notifications, cloud, vector store) are swappable via `settings.yaml`.
-
-## Quick Start
-
-```bash
-cp .env.example .env        # fill in your credentials
-make install                # install deps + pre-commit hooks
-make setup                  # seed ChromaDB
-make check                  # verify all adapter connections
-make run                    # start webhook server
+```
+Zoho Sprints Issue
+       ↓  (webhook)
+   Webhook Server  ──►  AWS SQS  ──►  Worker
+       ↓
+   INTAKE — quality gate (FIXABLE or VAGUE?)
+       ↓
+   FIX GENERATION — 5-agent pipeline
+       │  MetaPlanner  → which repos? (api / cms / both)
+       │  Planner      → keyword search on code graph → target files
+       │  Explorer     → fetch files, classify must-change vs context
+       │  Coder        → generate surgical edits (old → new)
+       │  Reviewer     → adversarial review (7 checks)
+       ↓
+   GitHub Draft PR created
+       ↓
+   Teams card — View PR | Approve & Deploy | Reject
+       ↓  (click Approve after merging PR)
+   AWS CodePipeline triggered
+       ↓
+   Teams green card — "✅ Deployment Started"
 ```
 
-Or with Docker:
+---
+
+## Prerequisites
+
+- Python 3.11+
+- Docker + Docker Compose
+- Accounts / credentials for:
+  - OpenAI (or Anthropic / Google Gemini)
+  - Zoho Sprints (OAuth2)
+  - GitHub (Personal Access Token)
+  - Microsoft Teams (Incoming Webhook URL)
+  - AWS (SQS queue + CodePipeline)
+
+---
+
+## Setup
+
+### 1. Clone and create `.env`
 
 ```bash
-docker-compose up --build
+git clone <repo-url>
+cd hackathon
+cp .env.example .env   # then fill in all values (see below)
 ```
+
+### 2. `.env` reference
+
+```env
+# LLM
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...   # only if using Claude
+
+# Zoho Sprints
+ZOHO_CLIENT_ID=...
+ZOHO_CLIENT_SECRET=...
+ZOHO_REFRESH_TOKEN=...
+ZOHO_SPRINTS_TEAM_ID=...          # numeric team ID from Zoho URL
+ZOHO_SPRINTS_WEBHOOK_TOKEN=...    # secret token for webhook HMAC verification
+
+# GitHub
+GITHUB_TOKEN=ghp_...
+
+# Microsoft Teams
+TEAMS_WEBHOOK_URL=https://tv2zdev.webhook.office.com/webhookb2/...
+BASE_URL=http://localhost:8000    # public URL of this server (used in Teams buttons)
+
+# AWS
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+AWS_SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/...
+AWS_S3_BUCKET=...
+AWS_CODEPIPELINE_NAME=wtdev2api-jobs
+```
+
+### 3. `settings.yaml` — pick your LLM and repos
+
+```yaml
+llm: openai          # claude | openai | gemini
+model: gpt-4o-mini   # model name for the active provider
+
+default_repos:
+  api: org/repo-api
+  cms: org/repo-cms
+default_branch: SIT  # branch PRs are raised against
+```
+
+| Provider | Recommended model |
+|----------|------------------|
+| `openai` | `gpt-4o-mini` (higher rate limits) or `gpt-4o` |
+| `claude` | `claude-sonnet-4-6` |
+| `gemini` | `gemini-1.5-pro` |
+
+---
+
+## Running
+
+### Docker (recommended)
+
+```bash
+docker compose up --build
+```
+
+This starts two containers:
+| Container | Role |
+|-----------|------|
+| `webhook` | FastAPI server on port 8000 — receives Zoho webhooks and approval clicks |
+| `worker`  | Polls SQS, runs the pipeline for each job |
+
+### Local (without Docker)
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Terminal 1 — webhook server
+PYTHONPATH=. uvicorn api.webhook_server:app --reload --port 8000
+
+# Terminal 2 — worker
+PYTHONPATH=. python -m core.queue.worker
+```
+
+---
+
+## Zoho Webhook Setup
+
+1. Go to **Zoho Sprints → Settings → Webhooks → Add Webhook**
+2. URL: `https://<your-server>/webhook/zoho`
+3. Events: `Item Create`, `Item Update`
+4. Secret token: same value as `ZOHO_SPRINTS_WEBHOOK_TOKEN` in `.env`
+
+The server also accepts `POST /` for generic testing.
+
+---
+
+## Teams Setup
+
+1. In your Teams channel → **Connectors → Incoming Webhook → Configure**
+2. Give it a name (e.g. "AutoFix AI"), copy the webhook URL
+3. Paste it into `.env` as `TEAMS_WEBHOOK_URL`
+4. Set `BASE_URL` to the public URL of your server (so Teams buttons point to it)
+
+> If running locally, `BASE_URL=http://localhost:8000` works — buttons open in your browser which can reach localhost.
+
+---
+
+## Approval Flow
+
+When a PR is raised, a Teams card appears with three buttons:
+
+| Button | Action |
+|--------|--------|
+| **View PR** | Opens the GitHub PR in browser |
+| **Approve & Deploy** | Triggers AWS CodePipeline, posts green status card |
+| **Reject** | Posts red status card, no deployment |
+
+The server deduplicates clicks — double-clicking Approve only fires one deploy job.
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Health check |
+| `POST` | `/webhook/zoho` | Zoho Sprints webhook receiver |
+| `POST` | `/api/approvals` | JSON approval (for programmatic use) |
+| `GET` | `/api/approvals/confirm` | Browser approval from Teams button click |
+
+### Manual trigger (testing)
+
+```bash
+curl -X POST http://localhost:8000/webhook/zoho \
+  -H "Content-Type: application/json" \
+  -H "X-ZOHO-WEBHOOK-TOKEN: <your-token>" \
+  -d '{
+    "triggerEvent": "Item_CREATE",
+    "zoid": "<team_id>",
+    "itemId": "12345",
+    "projectId": "proj-1",
+    "sprintId": "sprint-1",
+    "data": "{\"ItemName\": \"Fix null email crash\", \"ItemDescription\": \"Auth middleware crashes when user.email is null\"}"
+  }'
+```
+
+### Manual approve (testing)
+
+```bash
+curl -X POST http://localhost:8000/api/approvals \
+  -H "Content-Type: application/json" \
+  -d '{"action": "approved", "issue_id": "12345", "branch": "SIT", "title": "Fix null email"}'
+```
+
+---
+
+## Pipeline Stages
+
+### INTAKE
+- Extracts title + description from webhook payload (no Zoho API round-trip)
+- Downloads and parses PDF/DOCX attachments for PRD content
+- LLM quality gate: `FIXABLE` → continue, `VAGUE` → post Zoho comment + stop
+
+### FIX GENERATION (5 agents)
+| Agent | Job |
+|-------|-----|
+| MetaPlanner | Decides which repos need changes and in what order |
+| Planner | Searches code graph (Louvain community detection) to find target files |
+| Explorer | Fetches files from GitHub, classifies must-change vs context-only |
+| Coder | Generates surgical `old_string → new_string` edits, never rewrites whole files |
+| Reviewer | Adversarial review: Correctness, Security, Regression, Boundaries, Error Handling, Concurrency, Style |
+
+### DEPLOY
+- Triggered by Teams approval
+- Updates CodePipeline source branch to `SIT`
+- Starts execution, returns `executionId`
+- Posts green "Deployment Started" card to Teams
+
+---
+
+## Worker Behavior
+
+- Polls SQS every 5 seconds
+- On success: deletes message from queue
+- On soft error (`IssueVagueError`, `NotFixableError`): alerts Teams, deletes message (no retry)
+- On hard error: retries up to **3 times**, then deletes message and alerts Teams
+
+---
 
 ## Project Structure
 
 ```
-core/          Pure business logic — 8 pipeline stages, models, queue, observability
-adapters/      Pluggable integrations — one folder per category
-config/        settings.yaml + per-tenant configs + adapter registry
-api/           FastAPI webhook server + admin endpoints
-scripts/       Setup and health check utilities
-tests/         Unit and integration tests
+api/                  FastAPI webhook server and approval endpoints
+adapters/
+  cloud/              AWS (SQS, S3, CodePipeline)
+  issue_tracker/      Zoho Sprints
+  llm/                OpenAI / Claude / Gemini
+  notification/       Microsoft Teams
+  version_control/    GitHub
+config/               Adapter registry, settings loader
+core/
+  agents/             MetaPlanner, Planner, Explorer, Coder, Reviewer
+  models/             IssueModel, PRModel, CoderResult, etc.
+  pipeline.py         Stage orchestration
+  queue/              SQS producer + worker loop
+  stages/             intake.py, agent_runner.py, deployer.py
+  utils/              GraphNavigator (code graph search)
+scripts/              Test and trigger utilities
+graph_api/            Pre-built code graph for API repo
+graph_cms/            Pre-built code graph for CMS repo
+settings.yaml         LLM + repo + branch configuration
+docker-compose.yml    Webhook + worker services
 ```
 
-## Configuration
+---
 
-Edit `settings.yaml` to pick your LLM and model — no code changes needed:
+## Troubleshooting
 
-```yaml
-llm: openai          # claude | openai | gemini
-model: gpt-4o        # model name for the active provider
-```
-
-| Provider | Example models |
-|----------|---------------|
-| `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` |
-| `claude` | `claude-sonnet-4-6`, `claude-opus-4-7` |
-| `gemini` | `gemini-1.5-pro` |
-
-## Test Files
-
-### Unit tests — no API key needed, run instantly
-
-| File | What it tests |
-|------|--------------|
-| `tests/test_agents.py` | PlannerAgent, CoderAgent, ReviewerAgent — all mocked |
-| `tests/test_orchestrator.py` | MultiAgentOrchestrator full loop — mocked adapters |
-| `tests/test_graph_navigator.py` | GraphNavigator keyword search and BFS — offline |
-
-### Individual agent tests — test one agent at a time with real LLM
-
-| File | Agent | What it does |
-|------|-------|-------------|
-| `scripts/test_planner.py` | PlannerAgent | Extracts keywords from issue → searches graph → returns files to fix |
-| `scripts/test_explorer.py` | ExplorerAgent | Reads code → decides which files must change vs. context only |
-| `scripts/test_coder.py` | CoderAgent | Generates the actual code fix for given files |
-| `scripts/test_reviewer.py` | ReviewerAgent | Reviews a fix → returns PASS / FAIL / PARTIAL + detailed checks |
-
-### Other live tests
-
-| File | What it tests |
-|------|--------------|
-| `scripts/test_agents_live.py` | All agents end-to-end in one run |
-| `scripts/test_adapters.py` | All configured adapters (Zoho, GitHub, etc.) can connect |
-| `tests/test_github_adapter.py` | GitHub adapter — fetches files, creates PRs |
-
-## Running Tests
-
-### Step 1 — do this once per terminal session
-
-```bash
-source venv/bin/activate          # activate the virtual environment
-set -a && source .env && set +a   # load API keys from .env
-pip install pyyaml -q             # only needed once if not already installed
-```
-
-### Step 2 — run whichever test you want
-
-```bash
-# Unit tests (no API key needed)
-make test
-pytest tests/test_agents.py -v
-pytest tests/test_orchestrator.py -v
-pytest tests/test_graph_navigator.py -v
-
-# Test each AI agent individually (calls real OpenAI/Claude API)
-python3 scripts/test_planner.py    # PlannerAgent
-python3 scripts/test_explorer.py   # ExplorerAgent
-python3 scripts/test_coder.py      # CoderAgent
-python3 scripts/test_reviewer.py   # ReviewerAgent
-
-# All agents in one run
-python3 scripts/test_agents_live.py
-
-# Verify all adapter connections (needs all env vars in .env)
-make check
-```
-
-### To test a different bug — edit 2 lines at the top of any script
-
-```python
-ISSUE_TITLE       = "Your bug title here"
-ISSUE_DESCRIPTION = "What goes wrong and where..."
-```
-
-### To switch model — edit `settings.yaml`
-
-```yaml
-llm: openai
-model: gpt-4o-mini   # cheaper/faster for quick tests
-```
-
-## Adding a New Adapter
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+| Symptom | Fix |
+|---------|-----|
+| `410 Gone` on Teams webhook | Regenerate the incoming webhook URL in Teams channel settings |
+| `404` on GitHub branch create | Check `default_branch` in `settings.yaml` matches actual repo branch |
+| `AWS_CODEPIPELINE_NAME not set` | Add `AWS_CODEPIPELINE_NAME=<name>` to `.env`, restart containers |
+| OpenAI `rate_limit_exceeded` | Switch to `gpt-4o-mini` in `settings.yaml` (higher TPM quota) |
+| Worker retrying same job | Hard error hit — check logs, fix root cause, purge SQS if needed: `docker compose exec worker python3 -c "import boto3,os; boto3.client('sqs',region_name=os.environ['AWS_REGION']).purge_queue(QueueUrl=os.environ['AWS_SQS_QUEUE_URL'])"` |
+| PR raises against wrong branch | Set `default_branch: SIT` (or your branch) in `settings.yaml` |
+| Teams buttons not showing | Ensure `TEAMS_WEBHOOK_URL` is not expired; regenerate if needed |

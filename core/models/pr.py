@@ -1,5 +1,4 @@
-from dataclasses import dataclass, field
-from typing import List
+from dataclasses import dataclass
 
 
 @dataclass
@@ -11,7 +10,6 @@ class PRModel:
     repo: str
     reviewer: str
     zoho_issue_id: str
-    related_prs: List[str] = field(default_factory=list)
     url: str = ""
     number: int = 0
     draft: bool = True

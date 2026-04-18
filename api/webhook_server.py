@@ -108,6 +108,54 @@ async def confirm_approval(
     return HTMLResponse(_approval_html(action, issue_id, pr_url, title))
 
 
+def _extract_item_fields(body: dict) -> tuple[str, str]:
+    """Extract title and description from a Zoho webhook body.
+
+    Zoho sends 'data' as a pseudo-JSON string where values may be unquoted,
+    e.g.: "ItemName" : Some text here,
+    We handle both quoted and unquoted values.
+    """
+    import json as _json
+    data_raw = body.get("data") or ""
+    data: dict = {}
+    if isinstance(data_raw, dict):
+        data = data_raw
+    elif isinstance(data_raw, str) and data_raw.strip().startswith("{"):
+        try:
+            data = _json.loads(data_raw)
+        except Exception:
+            pass
+
+    title = ""
+    for key in ("ItemName", "itemName", "name", "title", "item_name"):
+        val = data.get(key) or body.get(key, "")
+        if val and str(val).strip():
+            title = str(val).strip()
+            break
+
+    description = ""
+    for key in ("ItemDescription", "itemDescription", "description", "desc"):
+        val = data.get(key) or body.get(key, "")
+        if val and str(val).strip():
+            description = str(val).strip()
+            break
+
+    # Zoho often sends unquoted values; fall back to flexible regex
+    if not title and isinstance(data_raw, str):
+        # Title is always a single line, ends at comma or newline
+        m = re.search(r'"ItemName"\s*:\s*"?([^"\n,}]+)', data_raw)
+        if m:
+            title = m.group(1).strip()
+
+    if not description and isinstance(data_raw, str):
+        # Description is HTML spanning multiple lines, ends just before closing \n}
+        m = re.search(r'"ItemDescription"\s*:\s*([\s\S]*?)\s*\n\}', data_raw)
+        if m:
+            description = m.group(1).strip().strip('"')
+
+    return title, description
+
+
 _ZOHO_ITEM_EVENTS = {
     "Item_CREATE", "Item Create", "Item_ADDED",
     "Item_UPDATE", "Item Update", "Item_MODIFIED",
@@ -142,11 +190,7 @@ async def zoho_webhook(request: Request, background_tasks: BackgroundTasks):
     if not item_id or not item_id.strip().lstrip("-").isdigit():
         raise HTTPException(status_code=400, detail=f"Missing item ID — keys: {list(body.keys())}")
 
-    data_str = str(body.get("data") or "")
-    m = re.search(r'"ItemName"\s*:\s*"([^"]*)"', data_str)
-    title = m.group(1).strip() if m else ""
-    m = re.search(r'"ItemDescription"\s*:\s*"([^"]*)"', data_str)
-    description = m.group(1).strip() if m else ""
+    title, description = _extract_item_fields(body)
 
     composite_id = encode_item_id(team_id, item_id)
 

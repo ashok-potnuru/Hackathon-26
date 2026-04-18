@@ -1,3 +1,5 @@
+import datetime
+import re
 import time
 
 from core.constants import PipelineStage
@@ -8,6 +10,60 @@ from core.observability.tracer import tracer
 from core.stages import agent_runner, deployer, intake
 
 logger = get_logger(__name__)
+
+
+def _create_fallback_pr(context: dict, error: Exception) -> str | None:
+    """Create a placeholder PR when the agent pipeline fails (e.g. LLM quota exceeded)."""
+    try:
+        adapters = context["adapters"]
+        issue = context.get("issue")
+        if not issue:
+            return None
+
+        settings = adapters.get("settings", {})
+        base_branch = settings.get("default_branch", "SIT")
+        repos = settings.get("default_repos", {})
+        repo = repos.get("api", "")
+        if not repo:
+            return None
+
+        gh = adapters["version_control"]
+        slug = re.sub(r"[^a-z0-9]+", "-", issue.title.lower())[:40].strip("-")
+        branch_name = f"autofix/pending/{slug}-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        file_path = f"autofix/pending/{issue.id.replace('|', '_')}.md"
+        file_content = (
+            f"# AutoFix Pending: {issue.title}\n\n"
+            f"**Issue ID:** {issue.id}  \n"
+            f"**Status:** Awaiting manual fix (automated pipeline failed)  \n"
+            f"**Error:** {error}  \n\n"
+            f"## Description\n\n{issue.description or '_(no description)_'}\n"
+        )
+
+        gh.create_branch(repo, branch_name, base_branch)
+        gh.commit_changes(repo, branch_name, {file_path: file_content}, f"autofix(pending): {issue.title}")
+
+        from core.models.pr import PRModel
+        pr = gh.create_pr(PRModel(
+            title=f"[AutoFix Pending] {issue.title}",
+            body=(
+                f"## Automated fix failed\n\n"
+                f"The AutoFix pipeline could not generate a code fix for this issue.\n\n"
+                f"**Reason:** `{error}`\n\n"
+                f"Please review and fix manually.\n\n"
+                f"---\n{issue.description or ''}"
+            ),
+            branch_name=branch_name,
+            base_branch=base_branch,
+            repo=repo,
+            reviewer="",
+            zoho_issue_id=issue.id,
+            draft=True,
+        ))
+        logger.info(f"Fallback PR created: {pr.url}")
+        return pr.url
+    except Exception as fb_err:
+        logger.warning(f"Fallback PR creation failed: {fb_err}")
+        return None
 
 _MAIN_STAGES = [
     (PipelineStage.INTAKE, intake.run),
@@ -30,7 +86,34 @@ async def run_pipeline(payload: dict, adapters: dict) -> None:
         return
 
     for stage_name, stage_fn in _MAIN_STAGES:
-        context = await _run_stage(stage_name, stage_fn, context, issue_id, tenant)
+        try:
+            context = await _run_stage(stage_name, stage_fn, context, issue_id, tenant)
+        except Exception as e:
+            if stage_name == PipelineStage.FIX_GENERATION:
+                logger.error(f"FIX_GENERATION failed — creating fallback PR: {e}")
+                fallback_url = _create_fallback_pr(context, e)
+                if fallback_url:
+                    issue = context.get("issue")
+                    issue_title = issue.title if issue else issue_id
+                    settings = adapters.get("settings", {})
+                    try:
+                        adapters["notification"].notify_pr_raised(
+                            issue_id=issue_id,
+                            title=f"[Pending] {issue_title}",
+                            pr_url=fallback_url,
+                            branch="",
+                            base_branch=settings.get("default_branch", "SIT"),
+                        )
+                    except Exception as ne:
+                        logger.warning(f"Teams fallback notification failed: {ne}")
+                else:
+                    try:
+                        adapters["notification"].send_alert(
+                            "", f"AutoFix pipeline failed for [{issue_id}] and fallback PR could not be created: {e}"
+                        )
+                    except Exception:
+                        pass
+            return
         if context is None:
             return
 

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import time
 
@@ -6,6 +7,8 @@ import openai
 
 from adapters.llm.base import LLMBase
 from core.exceptions import AdapterError
+
+logger = logging.getLogger(__name__)
 
 # gpt-4.5 has a 1M token context window — set generous output limits.
 _DEFAULT_MODEL = "gpt-5.4"
@@ -92,7 +95,7 @@ class OpenAIAdapter(LLMBase):
                 if attempt == 3:
                     raise
                 wait = 30 * (attempt + 1)   # 30s, 60s, 90s
-                print(f"[OpenAI] Rate limit hit — retrying in {wait}s ({e})")
+                logger.warning(f"Rate limit hit — retrying in {wait}s ({e})")
                 time.sleep(wait)
             except Exception:
                 raise
