@@ -20,6 +20,19 @@ Set TEST_SINGLE_REPO = "api" or "cms" to force a single-repo run.
 import os, sys, re, datetime, textwrap
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Load .env before any adapter import so API keys are in os.environ
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+except ImportError:
+    _env = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(_env):
+        for _l in open(_env):
+            _l = _l.strip()
+            if _l and not _l.startswith("#") and "=" in _l:
+                _k, _v = _l.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 from scripts._llm_loader import load_llm
 from core.agents.meta_planner import MetaPlannerAgent
 from core.agents.planner_agent import PlannerAgent
@@ -27,8 +40,13 @@ from core.agents.explorer_agent import ExplorerAgent
 from core.agents.coder_agent import CoderAgent
 from core.agents.reviewer_agent import ReviewerAgent
 from core.utils.graph_navigator import get_navigator
+from core.utils.route_scanner import CMSControllerMatcher, RouteScanner
 from adapters.version_control.github import GitHubAdapter
 from core.models.pr import PRModel
+
+_API_ROOT = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "hackathon_wlb_api")
+)
 
 # ── Test config ──────────────────────────────────────────────────────────────
 CREATE_PR        = True        # create a Draft PR after each repo's review
@@ -234,6 +252,8 @@ if TEST_SINGLE_REPO:
         repos=[TEST_SINGLE_REPO],
         api_spec=ISSUE_DESCRIPTION if TEST_SINGLE_REPO == "api" else "",
         cms_spec=ISSUE_DESCRIPTION if TEST_SINGLE_REPO == "cms" else "",
+        api_keywords=[],
+        cms_keywords=[],
         shared_context="",
         reasoning="forced single-repo override",
     )
@@ -311,12 +331,38 @@ for REPO_TYPE in meta_plan.repos:
     if seed_kws:
         log(f"\nSeed keywords from MetaPlanner (used first): {seed_kws}")
 
+    # ── Route-first targeting preview (instant — no LLM) ─────────────────────
+    subheader(f"STAGE 1a — Route-First Targeting [{REPO_TYPE}]")
+    log("What it does: inspects route files / domain map to find the exact")
+    log("              controller before touching the graph or LLM keywords.")
+    _rf_spec = spec or ISSUE_DESCRIPTION
+    if REPO_TYPE == "api":
+        _rf = RouteScanner(_API_ROOT).find_route_targets(ISSUE_TITLE, _rf_spec)
+    else:
+        _rf = CMSControllerMatcher().find_cms_targets(ISSUE_TITLE, _rf_spec)
+    _icon = {"high": "✓ HIGH", "medium": "~ MEDIUM", "low": "? LOW", "none": "✗ NONE"}
+    log(f"Confidence    : {_icon.get(_rf.confidence, _rf.confidence)}")
+    log(f"Reasoning     : {_rf.reasoning}")
+    if _rf.matched_route:
+        log(f"Matched route : {_rf.matched_route}")
+        log(f"Handler       : {_rf.matched_handler}")
+    if _rf.files:
+        log(f"Resolved files: {_rf.files}")
+    if _rf.keywords:
+        log(f"Inj. keywords : {_rf.keywords}")
+    if _rf.confidence in ("high", "medium"):
+        log("\n→ HIGH/MEDIUM confidence: PlannerAgent will skip graph keyword search")
+        log("  and go directly to BFS expansion from the resolved controller.")
+    elif _rf.confidence == "none":
+        log("\n→ NONE: no route match — PlannerAgent will fall back to graph keyword search.")
+
     print(f"\n  [{ts()}] Searching graph_{REPO_TYPE}/graph.json...")
     nav     = get_navigator(REPO_TYPE)
-    planner = PlannerAgent(llm, nav)
+    planner = PlannerAgent(llm, nav, api_root=(_API_ROOT if REPO_TYPE == "api" else ""))
     plan    = planner.plan(ISSUE_TITLE, spec or ISSUE_DESCRIPTION,
                            cross_repo_context=cross_repo_ctx,
-                           seed_keywords=seed_kws)
+                           seed_keywords=seed_kws,
+                           repo_type=REPO_TYPE)
 
     subheader(f"PlannerAgent [{REPO_TYPE}] output")
     log(f"Keywords extracted : {plan.keywords_extracted}")

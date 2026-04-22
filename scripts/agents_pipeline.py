@@ -45,9 +45,17 @@ def run(title: str, description: str, github_repo: str = "", base_branch: str = 
 
     # ── STEP 1: PlannerAgent ─────────────────────────────────────────────────
     nav = get_navigator(repo_type)
-    planner = PlannerAgent(llm, nav)
+    api_root = ""
+    if repo_type == "api":
+        api_root = os.path.normpath(
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "..", "hackathon_wlb_api",
+            )
+        )
+    planner = PlannerAgent(llm, nav, api_root=api_root)
     plan = planner.plan(title, description, cross_repo_context=cross_repo_context,
-                        seed_keywords=seed_keywords)
+                        seed_keywords=seed_keywords, repo_type=repo_type)
 
     logger.info(f"planner: target_files={plan.target_files} keywords={plan.keywords_extracted}")
     if not plan.target_files:

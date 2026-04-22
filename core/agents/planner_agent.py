@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from core.agents.base_agent import BaseAgent
 from core.constants import MAX_FILES_FOR_AUTO_FIX
 from core.utils.graph_navigator import GraphNavigator
 from core.utils.json_utils import extract_json
+from core.utils.route_scanner import CMSControllerMatcher, RouteScanner
+
+logger = logging.getLogger(__name__)
 
 _PLANNER_SYSTEM = (
     "You are a code planning expert. Given a bug report or feature request, "
@@ -46,9 +50,11 @@ class PlanResult:
 
 
 class PlannerAgent(BaseAgent):
-    def __init__(self, llm_adapter, graph_navigator: GraphNavigator) -> None:
+    def __init__(self, llm_adapter, graph_navigator: GraphNavigator, api_root: str = "") -> None:
         super().__init__(llm_adapter)
         self._nav = graph_navigator
+        self._route_scanner = RouteScanner(api_root) if api_root else None
+        self._cms_matcher = CMSControllerMatcher()
 
     def plan(
         self,
@@ -57,6 +63,7 @@ class PlannerAgent(BaseAgent):
         cross_repo_context: str = "",
         seed_keywords: list[str] | None = None,
         max_files: int = MAX_FILES_FOR_AUTO_FIX,
+        repo_type: str = "api",
     ) -> PlanResult:
         """Extract keywords via LLM, search graph, return files to fix.
 
@@ -123,11 +130,49 @@ class PlannerAgent(BaseAgent):
                 and not any(sf.startswith(p) for p in _SKIP_PREFIXES)
             )
 
+        seen_sf: set[str] = set()
+        phase1: list[str] = []
+
+        # ── Route-first targeting ─────────────────────────────────────────────
+        if repo_type == "api" and self._route_scanner:
+            route_result = self._route_scanner.find_route_targets(title, description)
+            logger.info(f"[RouteFirst/API] {route_result.confidence}: {route_result.reasoning}")
+            if route_result.confidence in ("high", "medium"):
+                related_files = self._nav.get_related_files(
+                    route_result.files, max_hops=2, max_files=max_files
+                )
+                return PlanResult(
+                    target_files=related_files,
+                    change_type=change_type,
+                    keywords_extracted=keywords,
+                    reasoning=(
+                        f"[RouteFirst/{route_result.confidence.upper()}] "
+                        f"{route_result.reasoning}"
+                    ),
+                )
+            elif route_result.confidence == "low":
+                for f in route_result.files:
+                    if f and f not in seen_sf and _is_runtime(f):
+                        seen_sf.add(f)
+                        phase1.append(f)
+
+        elif repo_type == "cms":
+            cms_result = self._cms_matcher.find_cms_targets(title, description)
+            logger.info(f"[RouteFirst/CMS] {cms_result.confidence}: {cms_result.reasoning}")
+            if cms_result.confidence != "none":
+                # Inject controller class names as highest-priority graph keywords.
+                # PHP class nodes score at max on exact class name match.
+                cms_kw_set = set(cms_result.keywords)
+                keywords = cms_result.keywords + [k for k in keywords if k not in cms_kw_set]
+                for f in cms_result.files:
+                    if f and f not in seen_sf and _is_runtime(f):
+                        seen_sf.add(f)
+                        phase1.append(f)
+
         # Phase 1: search with MetaPlanner seed keywords only — these name specific
         # controllers/views so they win over broad LLM keywords like "configurations".
         seed_kw_list = [k.lower() for k in (seed_keywords or [])]
-        seen_sf: set[str] = set()
-        phase1: list[str] = []
+        seed_matches: list = []
         if seed_kw_list:
             seed_matches = self._nav.search_nodes(seed_kw_list, top_k=30)
             for m in seed_matches:
