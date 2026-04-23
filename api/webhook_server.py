@@ -157,7 +157,7 @@ def _extract_item_fields(body: dict) -> tuple[str, str]:
 
 
 _ZOHO_ITEM_EVENTS = {
-    "Item_CREATE", "Item Create", "Item_ADDED",
+    "Item_CREATE", "Item Create", "Item_ADDED", "Item_ADD",
     "Item_UPDATE", "Item Update", "Item_MODIFIED",
 }
 
@@ -177,7 +177,13 @@ async def zoho_webhook(request: Request, background_tasks: BackgroundTasks):
     if "form" in content_type:
         body = dict(await request.form())
     else:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+    # Zoho sends most fields as query params — merge them in (body takes priority)
+    body = {**dict(request.query_params), **body}
 
     logger.info(f"ZOHO WEBHOOK: {body}")
 
@@ -186,9 +192,13 @@ async def zoho_webhook(request: Request, background_tasks: BackgroundTasks):
         return {"status": "ignored", "reason": f"unhandled event_type: {event_type}"}
 
     team_id = str(body.get("zoid") or os.environ.get("ZOHO_SPRINTS_TEAM_ID", ""))
-    item_id = str(body.get("itemId") or body.get("item_id") or "")
+    allowed_team_id = os.environ.get("ZOHO_SPRINTS_TEAM_ID", "60010251675")
+    if team_id and team_id != allowed_team_id:
+        return {"status": "ignored", "reason": f"unauthorized zoid: {team_id}"}
+    item_id = str(body.get("itemId") or body.get("item_id") or body.get("itemid") or "")
     if not item_id or not item_id.strip().lstrip("-").isdigit():
-        raise HTTPException(status_code=400, detail=f"Missing item ID — keys: {list(body.keys())}")
+        logger.warning(f"ZOHO WEBHOOK: missing itemId — keys: {list(body.keys())}")
+        return {"status": "ignored", "reason": "missing itemId"}
 
     title, description = _extract_item_fields(body)
 
